@@ -1,0 +1,27 @@
+name: 'Test'
+
+description: 'The test workflow for a Python app'
+
+inputs:
+  app_name:
+    required: true
+
+runs:
+  using: 'composite'
+
+  steps:
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
+        pip install pycodestyle commonconf nose2 coverage coveralls==2.2.0
+
+    - name: Run Linters
+      run: pycodestyle ${{ inputs.app_name }}/
+
+    - name: Run Tests
+      run: coverage run ${{ inputs.app_name }}/test.py -v
+
+    - name: Record Test Results
+      shell: bash
+      run: coveralls

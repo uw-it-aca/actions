@@ -1,0 +1,45 @@
+name: 'Test'
+
+description: 'The test workflow for a Django app'
+
+inputs:
+  app_name:
+    required: true
+  conf_path:
+    required: true
+  django_version:
+    required: true
+
+runs:
+  using: 'composite'
+
+  steps:
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
+        pip install pycodestyle coverage coveralls==2.2.0
+
+    - name: Upgrade Django Version
+      run: pip install "Django~=${{ inputs.django_version }}.0"
+
+    - name: Setup Django
+      run: |
+        django-admin startproject project .
+        test -f ${{ inputs.conf_path }}/urls.py && cp ${{ inputs.conf_path }}/urls.py project/
+        test -f ${{ inputs.conf_path }}/settings.py && cat ${{ inputs.conf_path }}/settings.py >> project/settings.py
+
+    - name: Run Linters
+      run: pycodestyle ${{ inputs.app_name }}/
+
+    - name: Run Migrations
+      run: python manage.py migrate
+
+    - name: Run Tests
+      run: |
+        python -m compileall ${{ inputs.app_name }}/
+        coverage run --source=${{ inputs.app_name }}/ manage.py test ${{ inputs.app_name }}
+
+    - name: Record Test Results
+      shell: bash
+      run: coveralls
