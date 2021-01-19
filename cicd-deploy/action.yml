@@ -179,7 +179,7 @@ runs:
         echo "SUBMITTED $FLUX_PULL_URL"
 
     - name: Merge Flux Pull Request
-      if: contains([main, master], inputs.git_repo_branch)
+      if: contains(fromJSON('[main, master]'), inputs.git_repo_branch)
       run: |
         GITHUB_API_MERGE="$(jq --raw-output '.url' ${{ env.FLUX_PR_OUTPUT }})/merge"
         curl -H "Authorization: Token ${{ inputs.gh_auth_token }}" -H "Content-type: application/json" -X PUT $GITHUB_API_MERGE -d @- <<EOF
