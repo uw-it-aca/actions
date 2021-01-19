@@ -132,6 +132,8 @@ runs:
         if [[ -n $(grep -e '^\s*securityContext\:.*$' "${{ env.LOCAL_MANIFEST }}") ]]; then
           CHECKOV_IMAGE="bridgecrew/checkov:${{ inputs.checkov_version }}"
           docker run -t -v ${PWD}/:/app "$CHECKOV_IMAGE" --quiet --skip-check "${{ inputs.checkov_skip_checks }}" -f /app/${{ env.MANIFEST_FILE_NAME }}
+        else
+          echo "SKIPPED: No Security Context Found"
         fi
 
     - name: Clone Flux Repository
