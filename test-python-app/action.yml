@@ -5,6 +5,8 @@ description: 'The test workflow for a Python app'
 inputs:
   app_name:
     required: true
+  github_token:
+    required: true
 
 runs:
   using: 'composite'
@@ -26,5 +28,7 @@ runs:
       run: coverage run ${{ inputs.app_name }}/test.py -v
 
     - name: Record Test Results
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
       shell: bash
       run: coveralls
