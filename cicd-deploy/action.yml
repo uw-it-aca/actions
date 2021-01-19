@@ -1,0 +1,183 @@
+name: 'CI/CD Deploy'
+
+description: 'Deployment image via flux repository configured to appropriate GCP project'
+
+inputs:
+  release_name:
+    required: true
+  commit_hash:
+    required: true
+  git_repo_branch:
+    required: true
+  gh_auth_token:
+    required: true
+  app_instance:
+    required: false
+    default: test
+  helm_chart_branch:
+    required: false
+    default: master
+  helm_chart_name:
+    required: false
+    default: django-production-chart
+  helm_app_version:
+    required: false
+    default: "3.4.2"
+  kubeval_version:
+    required: false
+    default: latest
+  kubeval_skip_kinds:
+    required: false
+    default: "ExternalSecret,ServiceMonitor"
+  checkov_version:
+    required: false
+    default: latest
+  checkov_skip_checks:
+    required: false
+    # acceptable policy violations:
+    #    CKV_K8S_21 - default namespace policy
+    #    CKV_K8S_35 - secret files preferred over environment
+    #    CKV_K8S_43 - image reference by digest
+    default: "CKV_K8S_21,CKV_K8S_35,CKV_K8S_43"
+
+runs:
+  using: 'composite'
+
+  steps:
+    - name: Deployment Context and Environment
+      run: |
+        # master/main branch hardwired to prod GCP instance and "prod" app instance
+        case ${{ inputs.git_repo_branch }} in
+          main|master)
+              APP_INSTANCE="prod"
+              FLUX_INSTANCE="prod"
+              GCP_PROJECT="uwit-mci-0011"
+              FLUX_RELEASE_SUFFIX=""
+              ;;
+          *)
+              APP_INSTANCE="${{ inputs.app_instance }}"
+              FLUX_INSTANCE="dev"
+              GCP_PROJECT="uwit-mci-0010"
+              FLUX_RELEASE_SUFFIX=""
+              if [ $APP_INSTANCE != "test" ]; then
+                FLUX_RELEASE_SUFFIX="-${APP_INSTANCE}"
+              fi
+              ;;
+        esac
+
+        echo APP_INSTANCE="$APP_INSTANCE" >> $GITHUB_ENV
+
+        APP_NAME=${{ inputs.release_name }}-prod-${APP_INSTANCE}
+        echo "APP_NAME=$APP_NAME" >> $GITHUB_ENV
+
+        echo "#####################################"
+        echo "DEPLOY $APP_NAME in ${GCP_PROJECT}"
+        echo "#####################################"
+
+        MANIFEST_FILE_NAME=${{ inputs.release_name }}${{ env.FLUX_RELEASE_SUFFIX }}.yaml
+        echo "MANIFEST_FILE_NAME=$MANIFEST_FILE_NAME" >> $GITHUB_ENV
+
+        LOCAL_MANIFEST=${PWD}/$MANIFEST_FILE_NAME
+        echo "LOCAL_MANIFEST=$LOCAL_MANIFEST" >> $GITHUB_ENV
+
+        # helm chart
+        HELM_CHART_LOCAL_DIR=${PWD}/${{ inputs.helm_chart_name }}
+        echo "HELM_CHART_LOCAL_DIR=$HELM_CHART_LOCAL_DIR" >> $GITHUB_ENV
+
+        # flux repository
+        FLUX_REPO_NAME=gcp-flux-${{ env.FLUX_INSTANCE }}
+        FLUX_REPO_PATH=uw-it-aca/$FLUX_REPO_NAME
+        echo "FLUX_REPO_PATH=$FLUX_REPO_PATH" >> $GITHUB_ENV
+
+        FLUX_RELEASE_BRANCH_NAME=release/${{ env.FLUX_INSTANCE }}/${{ inputs.release_name }}/${{ inputs.commit_hash }}
+        echo "FLUX_RELEASE_BRANCH_NAME=$FLUX_RELEASE_BRANCH_NAME" >> $GITHUB_ENV
+
+        FLUX_RELEASE_MANIFEST=releases/${{ env.FLUX_INSTANCE }}/$MANIFEST_FILE_NAME
+        echo "FLUX_RELEASE_BRANCH_NAME=$FLUX_RELEASE_BRANCH_NAME" >> $GITHUB_ENV
+
+        # local paths
+        FLUX_LOCAL_DIR=${PWD}/$FLUX_REPO_NAME
+        echo "FLUX_LOCAL_DIR=$FLUX_LOCAL_DIR" >> $GITHUB_ENV
+
+        FLUX_PR_OUTPUT=${PWD}/pr-${{ env.FLUX_INSTANCE }}-${{ inputs.release_name }}-${{ inputs.commit_hash }}.json
+        echo "FLUX_PR_OUTPUT=$FLUX_PR_OUTPUT" >> $GITHUB_ENV
+
+
+        # flux commit messages
+        COMMIT_MESSAGE="Automated ${{ env.FLUX_INSTANCE }} deploy of ${{ github.repository }}:${{ inputs.commit_hash }} build ${{ github.run_id }}"
+        echo "COMMIT_MESSAGE=$COMMIT_MESSAGE" >> $GITHUB_ENV
+        PULL_REQUEST_MESSAGE="Automated ${{ env.FLUX_INSTANCE }} deploy of [${{ github.repository }}:${{ inputs.commit_hash }}](/${{ github.repository }}/commit/${{ inputs.commit_hash }})  Generated build [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+        echo "PULL_REQUEST_MESSAGE=$PULL_REQUEST_MESSAGE" >> $GITHUB_ENV
+
+    - name: Clone Helm Chart
+      run: |
+        HELM_CHART_REPO=https://github.com/uw-it-aca/${{ inputs.helm_chart_name }}.git
+
+        git clone --depth 1 "$HELM_CHART_REPO" --branch ${{ inputs.helm_chart_branch }} ${{ env.HELM_CHART_LOCAL_DIR }}
+
+    - name: Generate App Manifest
+      run: |
+        HELM_IMAGE="alpine/helm:${{ inputs.helm_app_version }}"
+        HELM_CHART_VALUES=docker/${{ env.APP_INSTANCE }}-values.yml
+
+        docker run -v ${PWD}:/app -v ${{ env.HELM_CHART_LOCAL_DIR }}:/chart $HELM_IMAGE template ${{ env.APP_NAME}} /chart --set-string "image.tag=${{ inputs.commit_hash }}" -f /app/$HELM_CHART_VALUES > ${{ env.LOCAL_MANIFEST }}
+
+    - name: Validate Manifest
+      run: |
+        KUBEVAL_IMAGE="garethr/kubeval:${{ inputs.kubeval_version }}"
+        docker run -t -v ${PWD}:/app "$KUBEVAL_IMAGE" /app/${{ env.MANIFEST_FILE_NAME }} --strict --skip-kinds "${{ inputs.kubeval_skip_kinds }}"
+
+    - name: Security Policy Scan
+      run: |
+        if [[ -n $(grep -e '^\s*securityContext\:.*$' "${{ env.LOCAL_MANIFEST }}") ]]; then
+          CHECKOV_IMAGE="bridgecrew/checkov:${{ inputs.checkov_version }}"
+          docker run -t -v ${PWD}/:/app "$CHECKOV_IMAGE" --quiet --skip-check "${{ inputs.checkov_skip_checks }}" -f /app/${{ env.MANIFEST_FILE_NAME }}
+        fi
+
+    - name: Clone Flux Repository
+      run: |
+        FLUX_REPO=https://${{ inputs.gh_auth_token }}@github.com/${{ env.FLUX_REPO_PATH }}.git
+        git clone --depth 1 "$FLUX_REPO" --branch master ${{ env.FLUX_LOCAL_DIR }} 2>&1 | sed -E 's/[[:xdigit:]]{32,}/[secret]/g'
+
+    - name: Create Flux Release Branch
+      working-directory: ${{ env.FLUX_LOCAL_DIR }}
+      run: |
+        git checkout -b ${{ env.FLUX_RELEASE_BRANCH_NAME }}
+        cp -p ${{ env.LOCAL_MANIFEST }} ${{ env.FLUX_RELEASE_MANIFEST }}
+        git add ${{ env.FLUX_RELEASE_MANIFEST }}
+        git status
+
+    - name: Commit Flux Release
+      working-directory: ${{ env.FLUX_LOCAL_DIR }}
+      run: |
+        git config user.email "aca-it@uw.edu"
+        git config user.name "uw-it-aca-tools"
+        git commit -m "${{ env.COMMIT_MESSAGE }}" ${{ env.FLUX_RELEASE_MANIFEST }} 2>&1 | sed -E 's/[[:xdigit:]]{32,}/[secret]/g'
+        git push origin ${{ env.FLUX_RELEASE_BRANCH_NAME }} 2>&1 | sed -E 's/[[:xdigit:]]{32,}/[secret]/g'
+        git status
+
+    - name: Submit Flux Pull Release
+      run: |
+        curl -H "Authorization: Token ${{ inputs.gh_auth_token }}" -H "Content-type: application/json" -X POST https://api.github.com/repos/${{ env.FLUX_REPO_PATH }}/pulls >${{ env.FLUX_PR_OUTPUT }} -d @- <<EOF
+        {
+          "title": "${{ env.COMMIT_MESSAGE }}",
+          "body": "${{ env.PULL_REQUEST_MESSAGE }}",
+          "head": "${{ env.FLUX_RELEASE_BRANCH_NAME }}",
+          "base": "master"
+        }
+        EOF
+        FLUX_PULL_URL=$(jq '.html_url' ${{ env.FLUX_PR_OUTPUT }})
+        echo "SUBMITTED $FLUX_PULL_URL"
+
+    - name: Merge Flux Pull Request
+      if: contains([main, master], inputs.git_repo_branch)
+      run: |
+        GITHUB_API_MERGE="$(jq --raw-output '.url' ${{ env.FLUX_PR_OUTPUT }})/merge"
+        curl -H "Authorization: Token ${{ inputs.gh_auth_token }}" -H "Content-type: application/json" -X PUT $GITHUB_API_MERGE -d @- <<EOF
+        {
+          "commit_title": "Automated merge of ${{ env.PULL_REQUEST_MESSAGE }}",
+          "commit_message": "Automated merge of ${{ env.PULL_REQUEST_MESSAGE }}",
+          "sha": $(jq '.head.sha' ${{ env.FLUX_PR_OUTPUT }}),
+          "merge_method": "merge"
+        }
+        EOF
