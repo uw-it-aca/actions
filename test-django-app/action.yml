@@ -9,6 +9,8 @@ inputs:
     required: true
   django_version:
     required: true
+  github_token:
+    required: true
 
 runs:
   using: 'composite'
@@ -47,5 +49,7 @@ runs:
         coverage run --source=${{ inputs.app_name }}/ manage.py test ${{ inputs.app_name }}
 
     - name: Record Test Results
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
       shell: bash
       run: coveralls
