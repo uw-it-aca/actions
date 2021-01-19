@@ -110,22 +110,27 @@ runs:
         echo "PULL_REQUEST_MESSAGE=$PULL_REQUEST_MESSAGE" >> $GITHUB_ENV
 
     - name: Clone Helm Chart
-      run: |
-        HELM_CHART_REPO=https://github.com/uw-it-aca/${{ inputs.helm_chart_name }}.git
-
-        git clone --depth 1 "$HELM_CHART_REPO" --branch ${{ inputs.helm_chart_branch }} ${{ env.HELM_CHART_LOCAL_DIR }}
+      run: >-
+        git clone --depth 1
+        https://github.com/uw-it-aca/${{ inputs.helm_chart_name }}.git
+        --branch ${{ inputs.helm_chart_branch }}
+        ${{ env.HELM_CHART_LOCAL_DIR }}
 
     - name: Generate App Manifest
-      run: |
-        HELM_IMAGE="alpine/helm:${{ inputs.helm_app_version }}"
-        HELM_CHART_VALUES=docker/${{ env.APP_INSTANCE }}-values.yml
-
-        docker run -v ${PWD}:/app -v ${{ env.HELM_CHART_LOCAL_DIR }}:/chart $HELM_IMAGE template ${{ env.APP_NAME}} /chart --set-string "image.tag=${{ inputs.commit_hash }}" -f /app/$HELM_CHART_VALUES > ${{ env.LOCAL_MANIFEST }}
+      run: >-
+        docker run -v ${PWD}:/app
+        -v ${{ env.HELM_CHART_LOCAL_DIR }}:/chart
+        alpine/helm:${{ inputs.helm_app_version }}
+        template ${{ env.APP_NAME}} /chart
+        --set-string "image.tag=${{ inputs.commit_hash }}"
+        -f /app/docker/${{ env.APP_INSTANCE }}-values.yml > ${{ env.LOCAL_MANIFEST }}
 
     - name: Validate Manifest
-      run: |
-        KUBEVAL_IMAGE="garethr/kubeval:${{ inputs.kubeval_version }}"
-        docker run -t -v ${PWD}:/app "$KUBEVAL_IMAGE" /app/${{ env.MANIFEST_FILE_NAME }} --strict --skip-kinds "${{ inputs.kubeval_skip_kinds }}"
+      run: >-
+        docker run -t -v ${PWD}:/app
+        garethr/kubeval:${{ inputs.kubeval_version }}
+        /app/${{ env.MANIFEST_FILE_NAME }}
+        --strict --skip-kinds "${{ inputs.kubeval_skip_kinds }}"
 
     - name: Security Policy Scan
       run: |
@@ -137,9 +142,10 @@ runs:
         fi
 
     - name: Clone Flux Repository
-      run: |
-        FLUX_REPO=https://${{ inputs.gh_auth_token }}@github.com/${{ env.FLUX_REPO_PATH }}.git
-        git clone --depth 1 "$FLUX_REPO" --branch master ${{ env.FLUX_LOCAL_DIR }} 2>&1 | sed -E 's/[[:xdigit:]]{32,}/[secret]/g'
+      run: >-
+        git clone --depth 1
+        https://${{ inputs.gh_auth_token }}@github.com/${{ env.FLUX_REPO_PATH }}.git
+        --branch master ${{ env.FLUX_LOCAL_DIR }} 2>&1 | sed -E 's/[[:xdigit:]]{32,}/[secret]/g'
 
     - name: Create Flux Release Branch
       working-directory: ${{ env.FLUX_LOCAL_DIR }}
@@ -160,7 +166,8 @@ runs:
 
     - name: Submit Flux Pull Release
       run: |
-        curl -H "Authorization: Token ${{ inputs.gh_auth_token }}" -H "Content-type: application/json" -X POST https://api.github.com/repos/${{ env.FLUX_REPO_PATH }}/pulls >${{ env.FLUX_PR_OUTPUT }} -d @- <<EOF
+        GITHUB_REPO_PULLS="https://api.github.com/repos/${{ env.FLUX_REPO_PATH }}/pulls"
+        curl -H "Authorization: Token ${{ inputs.gh_auth_token }}" -H "Content-type: application/json" -X POST ${GITHUB_REPO_PULLS} >${{ env.FLUX_PR_OUTPUT }} -d @- <<EOF
         {
           "title": "${{ env.COMMIT_MESSAGE }}",
           "body": "${{ env.PULL_REQUEST_MESSAGE }}",
