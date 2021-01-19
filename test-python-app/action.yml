@@ -11,15 +11,18 @@ runs:
 
   steps:
     - name: Install Dependencies
+      shell: bash
       run: |
         python -m pip install --upgrade pip
         pip install -e .
         pip install pycodestyle commonconf nose2 coverage coveralls==2.2.0
 
     - name: Run Linters
+      shell: bash
       run: pycodestyle ${{ inputs.app_name }}/
 
     - name: Run Tests
+      shell: bash
       run: coverage run ${{ inputs.app_name }}/test.py -v
 
     - name: Record Test Results
