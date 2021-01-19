@@ -15,16 +15,19 @@ runs:
 
   steps:
     - name: Install dependencies
+      shell: bash
       run: |
         python -m pip install --upgrade pip
         pip install setuptools wheel twine
 
     - name: Build
+      shell: bash
       run: |
         echo ${{ inputs.tag_name }} > ${{ inputs.app_name }}/VERSION
         python setup.py sdist bdist_wheel
 
     - name: Publish to PyPi
+      shell: bash
       env:
         TWINE_REPOSITORY: pypi
         TWINE_USERNAME: __token__
