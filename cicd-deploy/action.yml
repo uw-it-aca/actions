@@ -45,6 +45,7 @@ runs:
 
   steps:
     - name: Deployment Context and Environment
+      shell: bash
       run: |
         # master/main branch hardwired to prod GCP instance and "prod" app instance
         case ${{ inputs.git_repo_branch }} in
@@ -110,6 +111,7 @@ runs:
         echo "PULL_REQUEST_MESSAGE=$PULL_REQUEST_MESSAGE" >> $GITHUB_ENV
 
     - name: Clone Helm Chart
+      shell: bash
       run: >-
         git clone --depth 1
         https://github.com/uw-it-aca/${{ inputs.helm_chart_name }}.git
@@ -117,6 +119,7 @@ runs:
         ${{ env.HELM_CHART_LOCAL_DIR }}
 
     - name: Generate App Manifest
+      shell: bash
       run: >-
         docker run -v ${PWD}:/app
         -v ${{ env.HELM_CHART_LOCAL_DIR }}:/chart
@@ -126,6 +129,7 @@ runs:
         -f /app/docker/${{ env.APP_INSTANCE }}-values.yml > ${{ env.LOCAL_MANIFEST }}
 
     - name: Validate Manifest
+      shell: bash
       run: >-
         docker run -t -v ${PWD}:/app
         garethr/kubeval:${{ inputs.kubeval_version }}
@@ -133,6 +137,7 @@ runs:
         --strict --skip-kinds "${{ inputs.kubeval_skip_kinds }}"
 
     - name: Security Policy Scan
+      shell: bash
       run: |
         if [[ -n $(grep -e '^\s*securityContext\:.*$' "${{ env.LOCAL_MANIFEST }}") ]]; then
           CHECKOV_IMAGE="bridgecrew/checkov:${{ inputs.checkov_version }}"
@@ -142,6 +147,7 @@ runs:
         fi
 
     - name: Clone Flux Repository
+      shell: bash
       run: >-
         git clone --depth 1
         https://${{ inputs.gh_auth_token }}@github.com/${{ env.FLUX_REPO_PATH }}.git
@@ -149,6 +155,7 @@ runs:
 
     - name: Create Flux Release Branch
       working-directory: ${{ env.FLUX_LOCAL_DIR }}
+      shell: bash
       run: |
         git checkout -b ${{ env.FLUX_RELEASE_BRANCH_NAME }}
         cp -p ${{ env.LOCAL_MANIFEST }} ${{ env.FLUX_RELEASE_MANIFEST }}
@@ -157,6 +164,7 @@ runs:
 
     - name: Commit Flux Release
       working-directory: ${{ env.FLUX_LOCAL_DIR }}
+      shell: bash
       run: |
         git config user.email "aca-it@uw.edu"
         git config user.name "uw-it-aca-tools"
@@ -165,6 +173,7 @@ runs:
         git status
 
     - name: Submit Flux Pull Release
+      shell: bash
       run: |
         GITHUB_REPO_PULLS="https://api.github.com/repos/${{ env.FLUX_REPO_PATH }}/pulls"
         curl -H "Authorization: Token ${{ inputs.gh_auth_token }}" -H "Content-type: application/json" -X POST ${GITHUB_REPO_PULLS} >${{ env.FLUX_PR_OUTPUT }} -d @- <<EOF
@@ -180,6 +189,7 @@ runs:
 
     - name: Merge Flux Pull Request
       if: contains(fromJSON('[main, master]'), inputs.git_repo_branch)
+      shell: bash
       run: |
         GITHUB_API_MERGE="$(jq --raw-output '.url' ${{ env.FLUX_PR_OUTPUT }})/merge"
         curl -H "Authorization: Token ${{ inputs.gh_auth_token }}" -H "Content-type: application/json" -X PUT $GITHUB_API_MERGE -d @- <<EOF
