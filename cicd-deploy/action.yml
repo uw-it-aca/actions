@@ -4,41 +4,53 @@ description: 'Deployment image via flux repository configured to appropriate GCP
 
 inputs:
   release_name:
+    description: 'Application name to use for release'
     required: true
   commit_hash:
+    description: 'Application repository hash applied to release'
     required: true
   git_repo_branch:
+    description: 'Application repository branch to release'
     required: true
   gh_auth_token:
+    description: 'Github auth token for Flux deployment repository'
     required: true
   app_instance:
+    description: 'Instance applied '
     required: false
-    default: test
+    default: 'test'
   helm_chart_branch:
+    description: 'Helm chart repository branch at the base of release'
     required: false
-    default: master
+    default: 'master'
   helm_chart_name:
+    description: 'Helm chart repository used to produce release manifest'
     required: false
-    default: django-production-chart
+    default: 'django-production-chart'
   helm_app_version:
+    description: 'Helm application version used to produce release manifest'
     required: false
-    default: "3.4.2"
+    default: '3.4.2'
   kubeval_version:
+    description: 'Kubeval version used to lint kubernetes manifest'
     required: false
-    default: latest
+    default: 'latest'
   kubeval_skip_kinds:
+    description: 'List of manifest objects for Kubeval to ignore'
     required: false
-    default: "ExternalSecret,ServiceMonitor"
+    default: 'ExternalSecret,ServiceMonitor'
   checkov_version:
+    description: 'Checkov security policy manifest scanner version'
     required: false
-    default: latest
+    default: 'latest'
   checkov_skip_checks:
+    description: 'Checkov security policy viloations to ignore'
     required: false
     # acceptable policy violations:
     #    CKV_K8S_21 - default namespace policy
     #    CKV_K8S_35 - secret files preferred over environment
     #    CKV_K8S_43 - image reference by digest
-    default: "CKV_K8S_21,CKV_K8S_35,CKV_K8S_43"
+    default: 'CKV_K8S_21,CKV_K8S_35,CKV_K8S_43'
 
 runs:
   using: 'composite'
@@ -154,47 +166,45 @@ runs:
     - name: Clone Flux Repository
       shell: bash
       run: |
-        echo "CLONE flux repository ${FLUX_REPO_PATH}"
         echo "::add-mask::${{ inputs.gh_auth_token }}"
+        echo "CLONE flux repository ${FLUX_REPO_PATH}"
         git clone --depth 1 https://${{ inputs.gh_auth_token }}@github.com/${FLUX_REPO_PATH}.git --branch master ${FLUX_LOCAL_DIR}
 
     - name: Create Flux Release Branch
       shell: bash
       run: |
         echo "CREATE branch $FLUX_RELEASE_BRANCH_NAME, add $FLUX_RELEASE_MANIFEST"
-        export OLDPWD=$PWD
-        cd $FLUX_LOCAL_DIR
+        pushd $PWD
 
         git checkout -b ${FLUX_RELEASE_BRANCH_NAME}
         cp -p ${LOCAL_MANIFEST} ${FLUX_RELEASE_MANIFEST}
         git add ${FLUX_RELEASE_MANIFEST}
         git status
 
-        cd $OLDPWD
+        popd
 
     - name: Commit Flux Release
       shell: bash
       run: |
-        echo "COMMIT flux release $FLUX_RELEASE_BRANCH_NAME"
-        export OLDPWD=$PWD
-        cd $FLUX_LOCAL_DIR
-
         echo "::add-mask::${{ inputs.gh_auth_token }}"
+        echo "COMMIT flux release $FLUX_RELEASE_BRANCH_NAME"
+        pushd $PWD
+
         git config user.email "aca-it@uw.edu"
         git config user.name "uw-it-aca-tools"
         git commit -m "${COMMIT_MESSAGE}" ${FLUX_RELEASE_MANIFEST}
         git push origin ${FLUX_RELEASE_BRANCH_NAME}
         git status
 
-        cd $OLDPWD
+        popd
 
     - name: Submit Flux Pull Release
       shell: bash
       run: |
+        echo "::add-mask::${{ inputs.gh_auth_token }}"
         echo "SUBMIT $FLUX_RELEASE_BRANCH_NAME pull request"
         GITHUB_REPO_PULLS="https://api.github.com/repos/${FLUX_REPO_PATH}/pulls"
-        echo "::add-mask::${{ inputs.gh_auth_token }}"
-        curl -H "Authorization: Token ${{ inputs.gh_auth_token }}" -H "Content-type: application/json" -X POST ${GITHUB_REPO_PULLS} >${FLUX_PR_OUTPUT} -d @- <<EOF
+        PR_DATA=$(cat <<EOF
         {
           "title": "${COMMIT_MESSAGE}",
           "body": "${PULL_REQUEST_MESSAGE}",
@@ -202,6 +212,8 @@ runs:
           "base": "master"
         }
         EOF
+
+        curl -H "Authorization: Token ${{ inputs.gh_auth_token }}" -H "Content-type: application/json" -X POST ${GITHUB_REPO_PULLS} >${FLUX_PR_OUTPUT} -d @- <<<${PR_DATA}
         FLUX_PULL_URL=$(jq '.html_url' ${FLUX_PR_OUTPUT})
         echo "FLUX_PULL_URL=$FLUX_PULL_URL" >> $GITHUB_ENV
         echo "SUBMITTED $FLUX_PULL_URL"
@@ -209,18 +221,20 @@ runs:
     - name: Merge Flux Pull Request
       shell: bash
       run: |
+        echo "::add-mask::${{ inputs.gh_auth_token }}"
+        MERGE_DATA=$(cat <<EOF
+        {
+          "commit_title": "Automated merge of ${PULL_REQUEST_MESSAGE}",
+          "commit_message": "Automated merge of ${PULL_REQUEST_MESSAGE}",
+          "sha": $(jq '.head.sha' ${FLUX_PR_OUTPUT}),
+          "merge_method": "merge"
+        }
+        EOF
+
         if [[ ${{ inputs.git_repo_branch }} =~ '^(main|master)$' ]]; then
           echo "Visit $FLUX_PULL_URL to merge manifest branch"
         else
           echo "MERGING ${FLUX_PULL_URL}"
           GITHUB_API_MERGE="$(jq --raw-output '.url' ${FLUX_PR_OUTPUT})/merge"
-          echo "::add-mask::${{ inputs.gh_auth_token }}"
-          curl -H "Authorization: Token ${{ inputs.gh_auth_token }}" -H "Content-type: application/json" -X PUT $GITHUB_API_MERGE -d @- <<EOF
-          {
-            "commit_title": "Automated merge of ${PULL_REQUEST_MESSAGE}",
-            "commit_message": "Automated merge of ${PULL_REQUEST_MESSAGE}",
-            "sha": $(jq '.head.sha' ${FLUX_PR_OUTPUT}),
-            "merge_method": "merge"
-          }
-          EOF
+          curl -H "Authorization: Token ${{ inputs.gh_auth_token }}" -H "Content-type: application/json" -X PUT $GITHUB_API_MERGE -d @- <<<${MERGE_DATA}
         fi
