@@ -9,47 +9,35 @@ inputs:
 outputs:
   commit_hash:
     description: "Commit ID to bind commit through containerization and deployment"
-    value: ${{ steps.commit-hash.outputs.commit_hash }}
+    value: ${{ steps.context.outputs.commit_hash }}
   image_tag:
     description: "Docker image tag for deployment"
-    value: ${{ steps.image-tag.outputs.image_tag }}
+    value: ${{ steps.context.outputs.image_tag }}
   git_repo_branch:
     description: "Short repository branch name"
-    value: ${{ steps.git-repo-branch.outputs.git_repo_branch }}
+    value: ${{ steps.context.outputs.git_repo_branch }}
 
 runs:
   using: 'composite'
 
   steps:
-    - run: echo "::group::Context"
-      shell: bash
-
-    - name: Commit Hash
-      id: commit-hash
+    - name: CI/CD Context
+      id: context
       shell: bash
       run: |
+        echo "::group::Context"
+
         export FULL_COMMIT_HASH="${{ github.sha }}"
         export COMMIT_HASH="${FULL_COMMIT_HASH:0:7}"
-        echo "COMMIT_HASH=$COMMIT_HASH" >> $GITHUB_ENV
         echo "::set-output name=commit_hash::${COMMIT_HASH}"
-        echo "set commit_hash to $COMMIT_HASH"
+        echo "set commit_hash to ${{ steps.context.commit_hash }}"
 
-    - name: Image Tag
-      id: image-tag
-      shell: bash
-      run: |
-        echo "IMAGE_TAG=${{ inputs.release_name }}:$COMMIT_HASH" >> $GITHUB_ENV
-        echo "::set-output name=image_tag::${IMAGE_TAG}"
-        echo "set image_tag to $IMAGE_TAG"
+        echo "::set-output name=image_tag::${{ inputs.release_name }}:$COMMIT_HASH"
+        echo "set image_tag to ${{ steps.context.image_tag }}"
 
-    - name: Git Repository Branch Name
-      id: git-repo-branch
-      shell: bash
-      run: |
         export GITHUB_REF="${{ github.ref }}"
-        echo "GIT_REPO_BRANCH=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
+        GIT_REPO_BRANCH=${GITHUB_REF#refs/heads/}
         echo "::set-output name=git_repo_branch::${GIT_REPO_BRANCH}"
-        echo "set git_repo_branch to $GIT_REPO_BRANCH"
+        echo "set git_repo_branch to ${{ steps.context.git_repo_branch }}"
 
-    - run: echo "::endgroup::"
-      shell: bash
+        echo "::endgroup::"
