@@ -30,14 +30,15 @@ runs:
         export FULL_COMMIT_HASH="${{ github.sha }}"
         export COMMIT_HASH="${FULL_COMMIT_HASH:0:7}"
         echo "::set-output name=commit_hash::${COMMIT_HASH}"
-        echo "set commit_hash to ${{ steps.context.commit_hash }}"
+        echo "commit_hash = ${COMMIT_HASH}"
 
-        echo "::set-output name=image_tag::${{ inputs.release_name }}:$COMMIT_HASH"
-        echo "set image_tag to ${{ steps.context.image_tag }}"
+        export IMAGE_TAG="${{ inputs.release_name }}:$COMMIT_HASH"
+        echo "::set-output name=image_tag::${IMAGE_TAG}"
+        echo "image_tag = ${IMAGE_TAG}"
 
         export GITHUB_REF="${{ github.ref }}"
         GIT_REPO_BRANCH=${GITHUB_REF#refs/heads/}
         echo "::set-output name=git_repo_branch::${GIT_REPO_BRANCH}"
-        echo "set git_repo_branch to ${{ steps.context.git_repo_branch }}"
+        echo "git_repo_branch = ${GIT_REPO_BRANCH}"
 
         echo "::endgroup::"
