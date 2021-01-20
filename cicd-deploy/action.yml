@@ -75,7 +75,7 @@ runs:
         echo "DEPLOY $APP_NAME in ${GCP_PROJECT}"
         echo "#####################################"
 
-        MANIFEST_FILE_NAME=${{ inputs.release_name }}${{ env.FLUX_RELEASE_SUFFIX }}.yaml
+        MANIFEST_FILE_NAME=${{ inputs.release_name }}${FLUX_RELEASE_SUFFIX}.yaml
         echo "MANIFEST_FILE_NAME=$MANIFEST_FILE_NAME" >> $GITHUB_ENV
 
         LOCAL_MANIFEST=${PWD}/$MANIFEST_FILE_NAME
@@ -86,117 +86,128 @@ runs:
         echo "HELM_CHART_LOCAL_DIR=$HELM_CHART_LOCAL_DIR" >> $GITHUB_ENV
 
         # flux repository
-        FLUX_REPO_NAME=gcp-flux-${{ env.FLUX_INSTANCE }}
+        FLUX_REPO_NAME=gcp-flux-${FLUX_INSTANCE}
         FLUX_REPO_PATH=uw-it-aca/$FLUX_REPO_NAME
         echo "FLUX_REPO_PATH=$FLUX_REPO_PATH" >> $GITHUB_ENV
 
-        FLUX_RELEASE_BRANCH_NAME=release/${{ env.FLUX_INSTANCE }}/${{ inputs.release_name }}/${{ inputs.commit_hash }}
+        FLUX_RELEASE_BRANCH_NAME=release/${FLUX_INSTANCE}/${{ inputs.release_name }}/${{ inputs.commit_hash }}
         echo "FLUX_RELEASE_BRANCH_NAME=$FLUX_RELEASE_BRANCH_NAME" >> $GITHUB_ENV
 
-        FLUX_RELEASE_MANIFEST=releases/${{ env.FLUX_INSTANCE }}/$MANIFEST_FILE_NAME
+        FLUX_RELEASE_MANIFEST=releases/${FLUX_INSTANCE}/$MANIFEST_FILE_NAME
         echo "FLUX_RELEASE_BRANCH_NAME=$FLUX_RELEASE_BRANCH_NAME" >> $GITHUB_ENV
 
         # local paths
         FLUX_LOCAL_DIR=${PWD}/$FLUX_REPO_NAME
         echo "FLUX_LOCAL_DIR=$FLUX_LOCAL_DIR" >> $GITHUB_ENV
 
-        FLUX_PR_OUTPUT=${PWD}/pr-${{ env.FLUX_INSTANCE }}-${{ inputs.release_name }}-${{ inputs.commit_hash }}.json
+        FLUX_PR_OUTPUT=${PWD}/pr-${FLUX_INSTANCE}-${{ inputs.release_name }}-${{ inputs.commit_hash }}.json
         echo "FLUX_PR_OUTPUT=$FLUX_PR_OUTPUT" >> $GITHUB_ENV
 
 
         # flux commit messages
-        COMMIT_MESSAGE="Automated ${{ env.FLUX_INSTANCE }} deploy of ${{ github.repository }}:${{ inputs.commit_hash }} build ${{ github.run_id }}"
+        COMMIT_MESSAGE="Automated ${FLUX_INSTANCE} deploy of ${{ github.repository }}:${{ inputs.commit_hash }} build ${{ github.run_id }}"
         echo "COMMIT_MESSAGE=$COMMIT_MESSAGE" >> $GITHUB_ENV
-        PULL_REQUEST_MESSAGE="Automated ${{ env.FLUX_INSTANCE }} deploy of [${{ github.repository }}:${{ inputs.commit_hash }}](/${{ github.repository }}/commit/${{ inputs.commit_hash }})  Generated build [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+        PULL_REQUEST_MESSAGE="Automated ${FLUX_INSTANCE} deploy of [${{ github.repository }}:${{ inputs.commit_hash }}](/${{ github.repository }}/commit/${{ inputs.commit_hash }})  Generated build [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
         echo "PULL_REQUEST_MESSAGE=$PULL_REQUEST_MESSAGE" >> $GITHUB_ENV
 
     - name: Clone Helm Chart
       shell: bash
       run: >-
-        git clone --depth 1
-        https://github.com/uw-it-aca/${{ inputs.helm_chart_name }}.git
+        export HELM_CHART_REPO_PATH="https://github.com/uw-it-aca/${{ inputs.helm_chart_name }}.git" &&
+        echo "CLONE chart repository $HELM_CHART_REPO_PATH (${{ inputs.helm_chart_branch }})" &&
+        git clone --depth 1 $HELM_CHART_REPO_PATH
         --branch ${{ inputs.helm_chart_branch }}
-        ${{ env.HELM_CHART_LOCAL_DIR }}
+        ${HELM_CHART_LOCAL_DIR}
 
     - name: Generate App Manifest
       shell: bash
       run: >-
+        export HELM_CHART_VALUES="/app/docker/${APP_INSTANCE}-values.yml" &&
+        echo "GENERATE release manifest $MANIFEST_FILE_NAME using $HELM_CHART_VALUES" &&
         docker run -v ${PWD}:/app
-        -v ${{ env.HELM_CHART_LOCAL_DIR }}:/chart
+        -v ${HELM_CHART_LOCAL_DIR}:/chart
         alpine/helm:${{ inputs.helm_app_version }}
-        template ${{ env.APP_NAME}} /chart
+        template ${APP_NAME} /chart
         --set-string "image.tag=${{ inputs.commit_hash }}"
-        -f /app/docker/${{ env.APP_INSTANCE }}-values.yml > ${{ env.LOCAL_MANIFEST }}
+        -f $HELM_CHART_VALUES > ${LOCAL_MANIFEST}
 
     - name: Validate Manifest
       shell: bash
       run: >-
+        echo "VALIDATE generated manifest ${MANIFEST_FILE_NAME}" &&
         docker run -t -v ${PWD}:/app
         garethr/kubeval:${{ inputs.kubeval_version }}
-        /app/${{ env.MANIFEST_FILE_NAME }}
+        /app/${MANIFEST_FILE_NAME}
         --strict --skip-kinds "${{ inputs.kubeval_skip_kinds }}"
 
     - name: Security Policy Scan
       shell: bash
       run: |
-        if [[ -n $(grep -e '^\s*securityContext\:.*$' "${{ env.LOCAL_MANIFEST }}") ]]; then
+        if [[ -n $(grep -e '^\s*securityContext\:.*$' "${LOCAL_MANIFEST}") ]]; then
+          echo "SCAN generated manifest $MANIFEST_FILE_NAME against security policies"
           CHECKOV_IMAGE="bridgecrew/checkov:${{ inputs.checkov_version }}"
-          docker run -t -v ${PWD}/:/app "$CHECKOV_IMAGE" --quiet --skip-check "${{ inputs.checkov_skip_checks }}" -f /app/${{ env.MANIFEST_FILE_NAME }}
+          docker run -t -v ${PWD}/:/app "$CHECKOV_IMAGE" --quiet --skip-check "${{ inputs.checkov_skip_checks }}" -f /app/${MANIFEST_FILE_NAME}
         else
-          echo "SKIPPED: No Security Context Found"
+          echo "Security Policy Scan Skipped: no context found"
         fi
 
     - name: Clone Flux Repository
       shell: bash
       run: >-
+        echo "CLONE flux repository ${FLUX_REPO_PATH}" &&
         git clone --depth 1
-        https://${{ inputs.gh_auth_token }}@github.com/${{ env.FLUX_REPO_PATH }}.git
-        --branch master ${{ env.FLUX_LOCAL_DIR }} 2>&1 | sed -E 's/[[:xdigit:]]{32,}/[secret]/g'
+        https://${{ inputs.gh_auth_token }}@github.com/${FLUX_REPO_PATH}.git
+        --branch master ${FLUX_LOCAL_DIR} 2>&1 | sed -E 's/[[:xdigit:]]{32,}/[secret]/g'
 
     - name: Create Flux Release Branch
       working-directory: ${{ env.FLUX_LOCAL_DIR }}
       shell: bash
       run: |
-        git checkout -b ${{ env.FLUX_RELEASE_BRANCH_NAME }}
-        cp -p ${{ env.LOCAL_MANIFEST }} ${{ env.FLUX_RELEASE_MANIFEST }}
-        git add ${{ env.FLUX_RELEASE_MANIFEST }}
+        echo "CREATE branch $FLUX_RELEASE_BRANCH_NAME, add $FLUX_RELEASE_MANIFEST"
+        git checkout -b ${FLUX_RELEASE_BRANCH_NAME}
+        cp -p ${LOCAL_MANIFEST} ${FLUX_RELEASE_MANIFEST}
+        git add ${FLUX_RELEASE_MANIFEST}
         git status
 
     - name: Commit Flux Release
       working-directory: ${{ env.FLUX_LOCAL_DIR }}
       shell: bash
       run: |
+        echo "COMMIT flux release $FLUX_RELEASE_BRANCH_NAME"
         git config user.email "aca-it@uw.edu"
         git config user.name "uw-it-aca-tools"
-        git commit -m "${{ env.COMMIT_MESSAGE }}" ${{ env.FLUX_RELEASE_MANIFEST }} 2>&1 | sed -E 's/[[:xdigit:]]{32,}/[secret]/g'
-        git push origin ${{ env.FLUX_RELEASE_BRANCH_NAME }} 2>&1 | sed -E 's/[[:xdigit:]]{32,}/[secret]/g'
+        git commit -m "${COMMIT_MESSAGE}" ${FLUX_RELEASE_MANIFEST} 2>&1 | sed -E 's/[[:xdigit:]]{32,}/[secret]/g'
+        git push origin ${FLUX_RELEASE_BRANCH_NAME} 2>&1 | sed -E 's/[[:xdigit:]]{32,}/[secret]/g'
         git status
 
     - name: Submit Flux Pull Release
       shell: bash
       run: |
-        GITHUB_REPO_PULLS="https://api.github.com/repos/${{ env.FLUX_REPO_PATH }}/pulls"
-        curl -H "Authorization: Token ${{ inputs.gh_auth_token }}" -H "Content-type: application/json" -X POST ${GITHUB_REPO_PULLS} >${{ env.FLUX_PR_OUTPUT }} -d @- <<EOF
+        echo "SUBMIT $FLUX_RELEASE_BRANCH_NAME pull request"
+        GITHUB_REPO_PULLS="https://api.github.com/repos/${FLUX_REPO_PATH}/pulls"
+        curl -H "Authorization: Token ${{ inputs.gh_auth_token }}" -H "Content-type: application/json" -X POST ${GITHUB_REPO_PULLS} >${FLUX_PR_OUTPUT} -d @- <<EOF
         {
-          "title": "${{ env.COMMIT_MESSAGE }}",
-          "body": "${{ env.PULL_REQUEST_MESSAGE }}",
-          "head": "${{ env.FLUX_RELEASE_BRANCH_NAME }}",
+          "title": "${COMMIT_MESSAGE}",
+          "body": "${PULL_REQUEST_MESSAGE}",
+          "head": "${FLUX_RELEASE_BRANCH_NAME}",
           "base": "master"
         }
         EOF
-        FLUX_PULL_URL=$(jq '.html_url' ${{ env.FLUX_PR_OUTPUT }})
+        FLUX_PULL_URL=$(jq '.html_url' ${FLUX_PR_OUTPUT})
+        echo "FLUX_PULL_URL=$FLUX_PULL_URL" >> $GITHUB_ENV
         echo "SUBMITTED $FLUX_PULL_URL"
 
     - name: Merge Flux Pull Request
       if: contains(fromJSON('[main, master]'), inputs.git_repo_branch)
       shell: bash
       run: |
-        GITHUB_API_MERGE="$(jq --raw-output '.url' ${{ env.FLUX_PR_OUTPUT }})/merge"
+        echo "MERGING ${FLUX_PULL_URL}"
+        GITHUB_API_MERGE="$(jq --raw-output '.url' ${FLUX_PR_OUTPUT})/merge"
         curl -H "Authorization: Token ${{ inputs.gh_auth_token }}" -H "Content-type: application/json" -X PUT $GITHUB_API_MERGE -d @- <<EOF
         {
-          "commit_title": "Automated merge of ${{ env.PULL_REQUEST_MESSAGE }}",
-          "commit_message": "Automated merge of ${{ env.PULL_REQUEST_MESSAGE }}",
-          "sha": $(jq '.head.sha' ${{ env.FLUX_PR_OUTPUT }}),
+          "commit_title": "Automated merge of ${PULL_REQUEST_MESSAGE}",
+          "commit_message": "Automated merge of ${PULL_REQUEST_MESSAGE}",
+          "sha": $(jq '.head.sha' ${FLUX_PR_OUTPUT}),
           "merge_method": "merge"
         }
         EOF

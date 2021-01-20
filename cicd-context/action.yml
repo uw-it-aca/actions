@@ -21,6 +21,9 @@ runs:
   using: 'composite'
 
   steps:
+    - name: Group output
+      run: echo "::group::Context"
+
     - name: Commit Hash
       id: commit-hash
       shell: bash
@@ -29,6 +32,7 @@ runs:
         export COMMIT_HASH="${FULL_COMMIT_HASH:0:7}"
         echo "COMMIT_HASH=$COMMIT_HASH" >> $GITHUB_ENV
         echo "::set-output name=commit_hash::${COMMIT_HASH}"
+        echo "set commit_hash to $COMMIT_HASH"
 
     - name: Image Tag
       id: image-tag
@@ -36,6 +40,7 @@ runs:
       run: |
         echo "IMAGE_TAG=${{ inputs.release_name }}:$COMMIT_HASH" >> $GITHUB_ENV
         echo "::set-output name=image_tag::${IMAGE_TAG}"
+        echo "set image_tag to $IMAGE_TAG"
 
     - name: Git Repository Branch Name
       id: git-repo-branch
@@ -44,3 +49,6 @@ runs:
         export GITHUB_REF="${{ github.ref }}"
         echo "GIT_REPO_BRANCH=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
         echo "::set-output name=git_repo_branch::${GIT_REPO_BRANCH}"
+        echo "set git_repo_branch to $GIT_REPO_BRANCH"
+
+    - run: echo "::endgroup::"
