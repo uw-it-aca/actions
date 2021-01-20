@@ -208,6 +208,7 @@ runs:
           "head": "${FLUX_RELEASE_BRANCH_NAME}",
           "base": "master"
         }
+        )
         EOF
 
         curl -H "Authorization: Token ${{ inputs.gh_auth_token }}" -H "Content-type: application/json" -X POST ${GITHUB_REPO_PULLS} >${FLUX_PR_OUTPUT} -d @- <<<${PR_DATA}
@@ -226,6 +227,7 @@ runs:
           "sha": $(jq '.head.sha' ${FLUX_PR_OUTPUT}),
           "merge_method": "merge"
         }
+        )
         EOF
 
         if [[ ${{ inputs.git_repo_branch }} =~ '^(main|master)$' ]]; then
