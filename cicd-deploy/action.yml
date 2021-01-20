@@ -209,7 +209,7 @@ runs:
     - name: Merge Flux Pull Request
       shell: bash
       run: |
-        if [[ ${{ inputs.git_repo_branch }} =~ ^(main|master)$' ]]; then
+        if [[ ${{ inputs.git_repo_branch }} =~ '^(main|master)$' ]]; then
           echo "Visit $FLUX_PULL_URL to merge manifest branch"
         else
           echo "MERGING ${FLUX_PULL_URL}"
