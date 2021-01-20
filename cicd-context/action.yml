@@ -21,8 +21,8 @@ runs:
   using: 'composite'
 
   steps:
-    - name: Group output
-      run: echo "::group::Context"
+    - run: echo "::group::Context"
+      shell: bash
 
     - name: Commit Hash
       id: commit-hash
@@ -52,3 +52,4 @@ runs:
         echo "set git_repo_branch to $GIT_REPO_BRANCH"
 
     - run: echo "::endgroup::"
+      shell: bash
