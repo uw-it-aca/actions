@@ -198,16 +198,19 @@ runs:
         echo "SUBMITTED $FLUX_PULL_URL"
 
     - name: Merge Flux Pull Request
-      if: contains(fromJSON('[main, master]'), inputs.git_repo_branch)
       shell: bash
       run: |
-        echo "MERGING ${FLUX_PULL_URL}"
-        GITHUB_API_MERGE="$(jq --raw-output '.url' ${FLUX_PR_OUTPUT})/merge"
-        curl -H "Authorization: Token ${{ inputs.gh_auth_token }}" -H "Content-type: application/json" -X PUT $GITHUB_API_MERGE -d @- <<EOF
-        {
-          "commit_title": "Automated merge of ${PULL_REQUEST_MESSAGE}",
-          "commit_message": "Automated merge of ${PULL_REQUEST_MESSAGE}",
-          "sha": $(jq '.head.sha' ${FLUX_PR_OUTPUT}),
-          "merge_method": "merge"
-        }
-        EOF
+        if [[ ${{ inputs.git_repo_branch }} =~ ^(main|master)$' ]]; then
+          echo "Visit $FLUX_PULL_URL to merge manifest branch"
+        else
+          echo "MERGING ${FLUX_PULL_URL}"
+          GITHUB_API_MERGE="$(jq --raw-output '.url' ${FLUX_PR_OUTPUT})/merge"
+          curl -H "Authorization: Token ${{ inputs.gh_auth_token }}" -H "Content-type: application/json" -X PUT $GITHUB_API_MERGE -d @- <<EOF
+          {
+            "commit_title": "Automated merge of ${PULL_REQUEST_MESSAGE}",
+            "commit_message": "Automated merge of ${PULL_REQUEST_MESSAGE}",
+            "sha": $(jq '.head.sha' ${FLUX_PR_OUTPUT}),
+            "merge_method": "merge"
+          }
+          EOF
+        fi
