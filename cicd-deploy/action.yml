@@ -153,11 +153,12 @@ runs:
 
     - name: Clone Flux Repository
       shell: bash
-      run: |
-        echo "CLONE flux repository ${FLUX_REPO_PATH}"
-        echo "::add-mask::${{ inputs.gh_auth_token }}"
+      run: >-
+        echo "CLONE flux repository ${FLUX_REPO_PATH}" &&
+        echo "::add-mask::${{ inputs.gh_auth_token }}" &&
         git clone --depth 1
-        https://${{ inputs.gh_auth_token }}@github.com/${FLUX_REPO_PATH}.git --branch master ${FLUX_LOCAL_DIR}
+         https://${{ inputs.gh_auth_token }}@github.com/${FLUX_REPO_PATH}.git
+         --branch master ${FLUX_LOCAL_DIR}
 
     - name: Create Flux Release Branch
       shell: bash
