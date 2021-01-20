@@ -153,19 +153,17 @@ runs:
 
     - name: Clone Flux Repository
       shell: bash
-      run: >-
-        echo "CLONE flux repository ${FLUX_REPO_PATH}" &&
-        echo "::add-mask::${{ inputs.gh_auth_token }}" &&
-        git clone --depth 1
-         https://${{ inputs.gh_auth_token }}@github.com/${FLUX_REPO_PATH}.git
-         --branch master ${FLUX_LOCAL_DIR}
+      run: |
+        echo "CLONE flux repository ${FLUX_REPO_PATH}"
+        echo "::add-mask::${{ inputs.gh_auth_token }}"
+        git clone --depth 1 https://${{ inputs.gh_auth_token }}@github.com/${FLUX_REPO_PATH}.git --branch master ${FLUX_LOCAL_DIR}
 
     - name: Create Flux Release Branch
       shell: bash
       run: |
         echo "CREATE branch $FLUX_RELEASE_BRANCH_NAME, add $FLUX_RELEASE_MANIFEST"
         export OLDPWD=$PWD
-        cd ${{ env.FLUX_LOCAL_DIR }}
+        cd $FLUX_LOCAL_DIR
 
         git checkout -b ${FLUX_RELEASE_BRANCH_NAME}
         cp -p ${LOCAL_MANIFEST} ${FLUX_RELEASE_MANIFEST}
@@ -179,7 +177,7 @@ runs:
       run: |
         echo "COMMIT flux release $FLUX_RELEASE_BRANCH_NAME"
         export OLDPWD=$PWD
-        cd ${{ env.FLUX_LOCAL_DIR }}
+        cd $FLUX_LOCAL_DIR
 
         echo "::add-mask::${{ inputs.gh_auth_token }}"
         git config user.email "aca-it@uw.edu"
