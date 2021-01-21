@@ -16,9 +16,8 @@ inputs:
 
 outputs:
   gcr_tag:
-    decription: 'GCR repository image tag'
+    description: 'GCR repository image tag'
     value: ${{ steps.gcr-tag.outputs.random-id }}
-    
 
 runs:
   using: 'composite'
@@ -26,6 +25,7 @@ runs:
   steps:
     - name: Docker login with GCP credentials
       id: gcp-login
+      shell: bash
       run: |
         echo "${{ inputs.gcp_json_key }}" |
           base64 -d |
@@ -33,6 +33,7 @@ runs:
 
     - name: Tag Image for GCR
       id: gcr-tag
+      shell: bash
       run: |
         GCR_TAG=${{ inputs.gcr_repository_base }}/${{ inputs.image_tag }}
         echo "::set-output name=gcr-tag::$GCR_TAG"
@@ -40,5 +41,6 @@ runs:
 
     - name: Push Image to GCR
       id: gcr-push
+      shell: bash
       run: |
         docker push "${{ steps.gcr-tag.outputs.random-id }}"
