@@ -99,7 +99,7 @@ jobs:
           app-test-container
           bash -c ". ./docker/test.sh"
 
-      - name: Setup Python
+      - name: Set up Python Test Dependency
         uses: actions/setup-python@v2
         with:
           python-version: 3.6
@@ -113,7 +113,7 @@ jobs:
           coverage combine
           coveralls
 
-      - name: Push Image to GCR
+      - name: Push Image to Repository
         if: github.event_name == 'push'
         uses: uw-it-aca/actions/gcr-push@v1.3
         with:

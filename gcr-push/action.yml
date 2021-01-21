@@ -44,4 +44,4 @@ runs:
       shell: bash
       run: |
         docker push "${{ steps.gcr-tag.outputs.gcr_tag }}"
-        echo "pushed "${{ steps.gcr-tag.outputs.gcr_tag }}"
+        echo "pushed ${{ steps.gcr-tag.outputs.gcr_tag }}"
