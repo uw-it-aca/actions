@@ -1,0 +1,51 @@
+name: 'Google Cloud Registry Push'
+
+description: 'Tag and push image to GCR'
+
+inputs:
+  image_tag:
+    description: 'Image tag to push to GCR'
+    required: true
+  gcp_json_key:
+    description: 'Authentication key for GCP access'
+    required: true
+  gcp_project_id:
+    description: 'GCP project containing registry'
+    required: false
+    default: 'uwit-mci-axdd'
+  gcr_hostname:
+    description: 'GCR hostname'
+    required: false
+    default: 'gcr.io'
+
+outputs:
+  gcr_tag:
+    description: 'GCR image tag'
+    value: ${{ steps.gcr-tag.outputs.gcr_tag }}
+
+runs:
+  using: 'composite'
+
+  steps:
+    - name: Docker login with GCP credentials
+      id: gcp-login
+      shell: bash
+      run: |
+        echo "${{ inputs.gcp_json_key }}" |
+          base64 -d |
+          docker login --username=_json_key --password-stdin https://${{ inputs.gcr_hostname }}
+
+    - name: Tag Image for GCR
+      id: gcr-tag
+      shell: bash
+      run: |
+        GCR_TAG=${{ inputs.gcr_hostname }}/${{ inputs.gcp_project_id }}/${{ inputs.image_tag }}
+        docker tag "${{ inputs.image_tag }}" "$GCR_TAG"
+        echo "::set-output name=gcr_tag::$GCR_TAG"
+
+    - name: Push Image to GCR
+      id: gcr-push
+      shell: bash
+      run: |
+        docker push "${{ steps.gcr-tag.outputs.gcr_tag }}"
+        echo "pushed ${{ steps.gcr-tag.outputs.gcr_tag }}"
