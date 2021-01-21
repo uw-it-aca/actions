@@ -117,8 +117,8 @@ jobs:
         if: github.event_name == 'push'
         uses: uw-it-aca/actions/gcr-push@v1.3
         with:
-            image_tag: ${{ steps.cicd.outputs.image_tag }}
-            gcp_json_key: ${{ secrets.GCP_JSON_KEY }}
+          image_tag: ${{ steps.cicd.outputs.image_tag }}
+          gcp_json_key: ${{ secrets.GCP_JSON_KEY }}
 
   deploy:
     if: github.event_name == 'push'
