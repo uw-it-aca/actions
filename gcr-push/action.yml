@@ -1,0 +1,44 @@
+name: 'Google Cloud Repository Push'
+
+description: 'Tag and push image to GCR'
+
+inputs:
+  image_tag:
+    description: 'Image tag to push to GCR'
+    required: true
+  gcp_json_key:
+    description: 'Authentication key for GCP access'
+    required: true
+  gcr_repository_base:
+    description: 'GCR repository tag base'
+    required: false
+    default: 'gcr.io/uwit-mci-axdd'
+
+outputs:
+  gcr_tag:
+    decription: 'GCR repository image tag'
+    value: ${{ steps.gcr-tag.outputs.random-id }}
+    
+
+runs:
+  using: 'composite'
+
+  steps:
+    - name: Docker login with GCP credentials
+      id: gcp-login
+      run: |
+        echo "${{ inputs.gcp_json_key }}" |
+          base64 -d |
+          docker login --username=_json_key --password-stdin https://gcr.io
+
+    - name: Tag Image for GCR
+      id: gcr-tag
+      run: |
+        GCR_TAG=${{ inputs.gcr_repository_base }}/${{ inputs.image_tag }}
+        echo "::set-output name=gcr-tag::$GCR_TAG"
+        docker tag "${{ inputs.image_tag }}" "$GCR_TAG"
+
+    - name: Push Image to GCR
+      id: gcr-push
+      run: |
+        docker push "${{ steps.gcr-tag.outputs.random-id }}"
