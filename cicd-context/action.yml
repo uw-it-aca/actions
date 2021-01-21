@@ -4,17 +4,22 @@ description: 'Generate CI/CD context values'
 
 inputs:
   release_name:
+    description: 'Release name used for image registry name'
     required: true
+  commit_hash_length:
+    description: 'Length of application commit hash used as image tag'
+    required: false
+    default: 7
 
 outputs:
   commit_hash:
-    description: "Commit ID to bind commit through containerization and deployment"
+    description: "Id used to trace commit through containerization and deployment"
     value: ${{ steps.context.outputs.commit_hash }}
   image_tag:
     description: "Docker image tag for deployment"
     value: ${{ steps.context.outputs.image_tag }}
   git_repo_branch:
-    description: "Short repository branch name"
+    description: "Short Github repository branch name"
     value: ${{ steps.context.outputs.git_repo_branch }}
 
 runs:
@@ -28,7 +33,7 @@ runs:
         echo "::group::Context"
 
         export FULL_COMMIT_HASH="${{ github.sha }}"
-        export COMMIT_HASH="${FULL_COMMIT_HASH:0:7}"
+        export COMMIT_HASH="${FULL_COMMIT_HASH:0:${{ inputs.commit_hash_length }}}"
         echo "::set-output name=commit_hash::${COMMIT_HASH}"
         echo "commit_hash = ${COMMIT_HASH}"
 
