@@ -27,6 +27,14 @@ runs:
   using: 'composite'
 
   steps:
+    - name: Verify GCP credentials
+      shell: bash
+      run: |
+        if [[ -z "${{ inputs.gcp_json_key }}" ]]; then
+          echo "Missing GCP credentials"
+          exit 1
+        fi
+
     - name: Docker login with GCP credentials
       id: gcp-login
       shell: bash
