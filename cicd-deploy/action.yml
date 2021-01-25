@@ -217,6 +217,8 @@ runs:
         echo "SUBMITTED $FLUX_PULL_URL"
 
     - name: Merge Flux Pull Request
+      env:
+        GIT_REPO_BRANCH: ${{ inputs.git_repo_branch }}
       shell: bash
       run: |
         echo "::add-mask::${{ inputs.gh_auth_token }}"
@@ -230,7 +232,7 @@ runs:
         EOF
         )
 
-        if [[ ${{ inputs.git_repo_branch }} =~ '^(main|master)$' ]]; then
+        if [[ $GIT_REPO_BRANCH =~ ^(main|master)$ ]]; then
           echo "Visit $FLUX_PULL_URL to merge manifest branch"
         else
           echo "MERGING ${FLUX_PULL_URL}"
