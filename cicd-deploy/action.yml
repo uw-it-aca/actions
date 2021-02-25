@@ -31,6 +31,10 @@ inputs:
     description: 'Helm application version used to produce release manifest'
     required: false
     default: '3.4.2'
+  helm_override_values_file:
+    description: 'File containing Helm chart value overrides'
+    required: false
+    default: /dev/null
   kubeval_version:
     description: 'Kubeval version used to lint kubernetes manifest'
     required: false
@@ -141,7 +145,8 @@ runs:
         alpine/helm:${{ inputs.helm_app_version }}
         template ${APP_NAME} /chart
         --set-string "image.tag=${{ inputs.commit_hash }}"
-        -f $HELM_CHART_VALUES > ${LOCAL_MANIFEST}
+        -f $HELM_CHART_VALUES
+        -f ${{ inputs.helm_override_values_file }} > ${LOCAL_MANIFEST}
 
     - name: Validate Manifest
       shell: bash

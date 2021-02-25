@@ -1,0 +1,108 @@
+name: 'Filter yaml based on time of day'
+
+description: 'Produce configured yaml based on configured time constraints'
+
+inputs:
+  config_file:
+    description: 'File containing values and associated time to produce them'
+    required: true
+  fudge_option:
+    description: 'Match current time with minutes on either side specified time'
+    default: 5
+    required: false
+  debug_option:
+    description: 'Print debugging information'
+    default: false
+    required: false
+
+outputs:
+  values:
+    description: "Yaml values appropriate for current time of day"
+    value: ${{ steps.values.outputs.values }}
+
+runs:
+  using: 'composite'
+
+  steps:
+    - name: CI/CD Context
+      shell: bash
+      run: |
+        TIMEVAL=$(cat<<EOF
+        import argparse
+        import yaml
+        from datetime import datetime, timedelta
+        import pytz
+        import sys
+
+
+        parser = argparse.ArgumentParser(description="Date driven value output")
+        parser.add_argument(
+            '-d',  '--debug', action='store_true',
+            dest='debug', help='Produce on debugging output')
+        parser.add_argument(
+            '-f',  '--fudge', type=int, dest='fudge',
+            default=5*60, help='Seconds on either side of now to match dates')
+        parser.add_argument(
+            '-c',  '--config', type=argparse.FileType('r'), dest='config',
+            default=sys.stdin, help='Time-based values configuration')
+        parser.add_argument(
+            '-o',  '--output-file', type=argparse.FileType('w'), dest='outfile',
+            default=sys.stdout, help='File to output override values')
+        args = parser.parse_args()
+
+
+        def debugging(msg):
+            if args.debug:
+                print(msg, file=sys.stderr)
+
+
+        def run_date(run_date, tz):
+            naive_rundate = datetime.strptime(run_date, "%Y-%m-%d %H:%M:%S")
+            if tz:
+                localized_rundate = tz.localize(naive_rundate)
+                utc_rundate = localized_rundate.astimezone(
+                    pytz.utc).replace(tzinfo=None)
+            else:
+                utc_rundate = naive_rundate
+
+            debugging("---\nscheduled {}\nin utc {}".format(
+                localized_rundate, utc_rundate))
+
+            return utc_rundate
+
+
+        def dump_yaml(comment, values):
+            override = yaml.dump(values, default_flow_style=False)
+            print("# {}\n{}".format(comment, override), file=args.outfile)
+
+
+        def override_values_for_date():
+            conf = yaml.load(args.config)
+            utc_now = datetime.utcnow()
+
+            try:
+                for id, conf in conf['overrides'].items():
+                    tz = pytz.timezone(conf['timezone']) if (
+                        'timezone' in conf) else None
+                    for date in conf['dates']:
+                        utc_rundate = run_date(date, tz)
+                        utc_rundate_min = utc_rundate - timedelta(
+                            seconds=args.fudge)
+                        utc_rundate_max = utc_rundate + timedelta(
+                            seconds=args.fudge)
+                        debugging(("Compare now {}\nto runtime {}\n"
+                                   " on either side of {} seconds").format(
+                                       utc_now, utc_rundate, args.fudge))
+
+                        if (utc_now > utc_rundate_min
+                                and utc_now < utc_rundate_max):
+                            dump_yaml(conf['name'], conf['override-values'])
+            except KeyError as ex:
+                print("Config error: Missing key {}".format(ex))
+
+        if __name__ == '__main__':
+            override_values_for_date()
+        EOF
+        )
+        VALUES=$(python -c "$TIMEVAL -c ${{ inputs.config_file }} -f ${{ inputs.fudge_option }}")
+        echo "::set-output name=values::${VALUES}"
