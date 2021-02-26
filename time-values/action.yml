@@ -104,5 +104,5 @@ runs:
             override_values_for_date()
         EOF
         )
-        VALUES=$(python $TIMEVAL ${{ inputs.config_file }} -f ${{ inputs.fudge_option }}")
+        VALUES=$(python $TIMEVAL ${{ inputs.config_file }} -f ${{ inputs.fudge_option }})
         echo "::set-output name=values::${VALUES}"
