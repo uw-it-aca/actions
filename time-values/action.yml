@@ -24,10 +24,14 @@ runs:
   using: 'composite'
 
   steps:
+    - name: Install Dependencies
+      run: |
+        pip3 install setuptools pyyaml pytz
+
     - name: CI/CD Context
       shell: bash
       run: |
-        TIMEVAL=$(cat<<EOF
+        cat > ./timevalues.py <<EOF
         import argparse
         import yaml
         from datetime import datetime, timedelta
@@ -103,6 +107,5 @@ runs:
         if __name__ == '__main__':
             override_values_for_date()
         EOF
-        )
-        VALUES=$(python $TIMEVAL ${{ inputs.config_file }} -f ${{ inputs.fudge_option }})
+        VALUES=$(python3 ./timevalues.py -c ${{ inputs.config_file }} -f ${{ inputs.fudge_option }})
         echo "::set-output name=values::${VALUES}"
