@@ -82,7 +82,7 @@ runs:
 
 
         def override_values_for_date():
-            conf = yaml.load(args.config)
+            conf = yaml.load(args.config, Loader=yaml.FullLoader)
             utc_now = datetime.utcnow()
 
             try:
