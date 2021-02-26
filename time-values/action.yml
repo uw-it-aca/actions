@@ -29,7 +29,7 @@ runs:
       run: |
         pip3 install setuptools pyyaml pytz
 
-    - name: CI/CD Context
+    - name: Prepare Override Script
       shell: bash
       run: |
         cat > ./timevalues.py <<EOF
@@ -108,7 +108,26 @@ runs:
         if __name__ == '__main__':
             override_values_for_date()
         EOF
+
+    - name: Set Arguments
+      shell: bash
+      run: |
+        if [[ ${{ inputs.debug_option }} == 'true' ]]; then
+          DEBUG_OPTION="-d"
+        else
+          DEBUG_OPTION=""
+        fi
+
+        if [[ ${{ inputs.fudge_option }} == 'true' ]]; then
+          FUDGE_OPTION=${{ inputs.fudge_option }}
+        else
+          FUDGE_OPTION=0
+        fi
+
+    - name: Produce Overrides by Date
+      shell: bash
+      run: |
         echo inputs.config_file
         cat "${{ inputs.config_file }}"
-        VALUES=$(python3 ./timevalues.py -c ${{ inputs.config_file }} -f ${{ inputs.fudge_option }})
+        VALUES=$(python3 ./timevalues.py -c ${{ inputs.config_file }} -f ${{ inputs.fudge_option }} -f ${FUDGE_OPTION} ${DEBUG_OPTION})
         echo "::set-output name=values::${VALUES}"
