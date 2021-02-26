@@ -108,5 +108,7 @@ runs:
         if __name__ == '__main__':
             override_values_for_date()
         EOF
+        echo inputs.config_file
+        cat "${{ inputs.config_file }}"
         VALUES=$(python3 ./timevalues.py -c ${{ inputs.config_file }} -f ${{ inputs.fudge_option }})
         echo "::set-output name=values::${VALUES}"
