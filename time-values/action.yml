@@ -129,5 +129,6 @@ runs:
       run: |
         echo inputs.config_file
         cat "${{ inputs.config_file }}"
+        echo "python3 ./timevalues.py -c ${{ inputs.config_file }} -f ${FUDGE_OPTION} ${DEBUG_OPTION}"
         VALUES=$(python3 ./timevalues.py -c ${{ inputs.config_file }} -f ${FUDGE_OPTION} ${DEBUG_OPTION})
         echo "::set-output name=values::${VALUES}"
