@@ -118,7 +118,7 @@ runs:
           DEBUG_OPTION=""
         fi
 
-        if [[ ${{ inputs.fudge_option }} == 'true' ]]; then
+        if [[ ${{ inputs.fudge_option }} =~ ^[0-9]+$ ]]; then
           FUDGE_OPTION=${{ inputs.fudge_option }}
         else
           FUDGE_OPTION=0
