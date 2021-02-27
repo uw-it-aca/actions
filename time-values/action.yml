@@ -132,4 +132,4 @@ runs:
       shell: bash
       run: |
         VALUES=$(python3 ./timevalues.py -c ${{ inputs.config_file }} -f ${FUDGE_OPTION} ${DEBUG_OPTION})
-        echo "::set-output name=values_file::${VALUES}"
+        echo "::set-output name=values::${VALUES}"
