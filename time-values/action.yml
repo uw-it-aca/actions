@@ -8,7 +8,7 @@ inputs:
     required: true
   fudge_option:
     description: 'Match current time with minutes on either side specified time'
-    default: 5
+    default: 300
     required: false
   debug_option:
     description: 'Print debugging information'
