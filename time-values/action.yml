@@ -132,4 +132,6 @@ runs:
       shell: bash
       run: |
         export VALUES=$(python3 ./timevalues.py -c ${{ inputs.config_file }} -f ${FUDGE_OPTION} ${DEBUG_OPTION})
+        echo "::group::Values"
         echo "::set-output name=values::${VALUES}"
+        echo "::endgroup::"
