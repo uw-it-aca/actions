@@ -133,8 +133,8 @@ runs:
       run: |
         VALUES=$(python3 ./timevalues.py -c ${{ inputs.config_file }} -f ${FUDGE_OPTION} ${DEBUG_OPTION})
         VALUES="${VALUES//'%'/'%25'}"
-        VALUES="${VALUES//'\n'/'%OA'}"
-        VALUES="${VALUES//'\r'/'%OD'}"
+        VALUES="${VALUES//$'\n'/'%0A'}"
+        VALUES="${VALUES//$'\r'/'%0D'}"
         echo "::group::Values"
         echo "::set-output name=values::${VALUES}"
         echo "::endgroup::"
