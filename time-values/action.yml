@@ -112,17 +112,20 @@ runs:
     - name: Set Arguments
       shell: bash
       run: |
+        if [[ ${{ inputs.fudge_option }} =~ ^[0-9]+$ ]]; then
+          FUDGE_OPTION=${{ inputs.fudge_option }}
+        else
+          FUDGE_OPTION=0
+        fi
+
         if [[ ${{ inputs.debug_option }} == 'true' ]]; then
           DEBUG_OPTION="-d"
         else
           DEBUG_OPTION=""
         fi
 
-        if [[ ${{ inputs.fudge_option }} =~ ^[0-9]+$ ]]; then
-          FUDGE_OPTION=${{ inputs.fudge_option }}
-        else
-          FUDGE_OPTION=0
-        fi
+        echo "DEBUG_OPTION=$DEBUG_OPTION" >> $GITHUB_ENV
+        echo "FUDGE_OPTION=$FUDGE_OPTION" >> $GITHUB_ENV
 
     - name: Produce Overrides by Date
       shell: bash
