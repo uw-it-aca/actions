@@ -131,7 +131,10 @@ runs:
       id: values
       shell: bash
       run: |
-        export VALUES=$(python3 ./timevalues.py -c ${{ inputs.config_file }} -f ${FUDGE_OPTION} ${DEBUG_OPTION})
+        VALUES=$(python3 ./timevalues.py -c ${{ inputs.config_file }} -f ${FUDGE_OPTION} ${DEBUG_OPTION})
+        VALUES="${VALUES//'%'/'%25'}"
+        VALUES="${VALUES//'\n'/'%OA'}"
+        VALUES="${VALUES//'\r'/'%OD'}"
         echo "::group::Values"
         echo "::set-output name=values::${VALUES}"
         echo "::endgroup::"
