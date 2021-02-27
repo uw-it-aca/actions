@@ -101,7 +101,7 @@ runs:
 
                         if (utc_now > utc_rundate_min
                                 and utc_now < utc_rundate_max):
-                            dump_yaml(conf['description'], conf['override-values'])
+                            dump_yaml(conf['description'], conf['values'])
             except KeyError as ex:
                 print("Config error: Missing key {}".format(ex))
 
@@ -131,5 +131,5 @@ runs:
       id: values
       shell: bash
       run: |
-        VALUES=$(python3 ./timevalues.py -c ${{ inputs.config_file }} -f ${FUDGE_OPTION} ${DEBUG_OPTION})
+        export VALUES=$(python3 ./timevalues.py -c ${{ inputs.config_file }} -f ${FUDGE_OPTION} ${DEBUG_OPTION})
         echo "::set-output name=values::${VALUES}"
