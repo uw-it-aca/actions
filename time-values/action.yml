@@ -128,7 +128,8 @@ runs:
         echo "FUDGE_OPTION=$FUDGE_OPTION" >> $GITHUB_ENV
 
     - name: Produce Overrides by Date
+      id: values
       shell: bash
       run: |
-        VALUES=$(python3 ./timevalues.py -c ${{ inputs.config_file }} -f ${FUDGE_OPTION} ${DEBUG_OPTION})
-        echo "::set-output name=values::${VALUES}"
+        VALUES=$(python3 ./timevalues.py -c ${{ inputs.config_file }} -f ${FUDGE_OPTION} ${DEBUG_OPTION} -o ${{inputs.output_file}})
+        echo "::set-output name=values_file::${VALUES}"
