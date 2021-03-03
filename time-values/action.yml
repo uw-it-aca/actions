@@ -1,6 +1,6 @@
-name: 'Filter yaml based on time of day'
+name: 'Override Helm Values'
 
-description: 'Produce configured yaml based on configured time constraints'
+description: 'Produce yaml based on time of date'
 
 inputs:
   config_file:
