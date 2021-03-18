@@ -1,0 +1,30 @@
+name: 'License Check'
+
+description: 'Checks that license and copyright information is included in files'
+
+inputs:
+  app_name:
+    required: true
+  license:
+    description: 'License to check'
+    required: true
+    default: 'Apache-2.0'
+  copyright_year:
+    description: 'Copyright year to check'
+    required: true
+    default: '2020'
+  copyright_owner:
+    description: 'Copyright owner to check'
+    required: true
+    default: 'UW-IT, University of Washington'
+
+runs:
+  using: 'composite'
+
+  steps:
+    - name: Check for license headers
+      shell: bash
+      run: >-
+        find ${{ inputs.app_name }} -type f -size +0 -name "*.py"
+        -exec grep -L "SPDX-License-Identifier: ${{ inputs.license }}" {} \;
+        -exec grep -L "Copyright ${{ inputs.copyright_year }} ${{ inputs.copyright_owner }}" {} \;
