@@ -1,0 +1,36 @@
+name: 'Linters for Python apps'
+
+description: 'Runs checks for python apps'
+
+inputs:
+  app_name:
+    required: true
+  style_exclude:
+    description: 'Directories excluded from style checks'
+    required: false
+    default: 'migrations'
+  license:
+    description: 'License to check'
+    required: false
+    default: 'Apache-2.0'
+  copyright_owner:
+    description: 'Copyright owner to check'
+    required: false
+    default: 'UW-IT, University of Washington'
+
+runs:
+  using: 'composite'
+
+  steps:
+    - name: Run Pycodestyle
+      shell: bash
+      run: |
+        pip install pycodestyle
+        pycodestyle ${{ inputs.app_name }}/ --exclude=${{ inputs.style_exclude }}
+
+    - name: Check for license headers
+      shell: bash
+      run: >-
+        find ${{ inputs.app_name }} -type f -size +0 -name "*.py"
+        -exec grep -L "SPDX-License-Identifier: ${{ inputs.license }}" {} \;
+        -exec grep -L "Copyright $(date, +'%Y') ${{ inputs.copyright_owner }}" {} \;
