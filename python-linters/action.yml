@@ -31,6 +31,11 @@ runs:
     - name: Check for License Headers
       shell: bash
       run: >-
-        find ${{ inputs.app_name }} -type f -size +0 -name "*.py"
-        -exec grep -L "SPDX-License-Identifier: ${{ inputs.license }}" {} \;
-        -exec grep -L "Copyright $(date +'%Y') ${{ inputs.copyright_owner }}" {} \;
+        LICENSE_ERR=$(find ${{ inputs.app_name }} -type f -size +0 -name "*.py"
+          -exec grep -L "SPDX-License-Identifier: ${{ inputs.license }}" {} \;
+          -exec grep -L "Copyright $(date +'%Y') ${{ inputs.copyright_owner }}" {} \;)
+        if [[ ! -z $LICENSE_ERR ]]; then
+          echo "Missing License or Copyright information:"
+          echo "$LICENSE_ERR"
+          exit 1
+        fi
