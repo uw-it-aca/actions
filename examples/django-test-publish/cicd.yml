@@ -80,6 +80,7 @@ jobs:
         uses: uw-it-aca/actions/python-linters@main
         with:
           app_name: ${APP_NAME}
+          exclude_paths: 'migrations'
 
       - name: Run Migrations
         run: python manage.py migrate

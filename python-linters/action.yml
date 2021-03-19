@@ -5,10 +5,10 @@ description: 'Runs checks for python apps'
 inputs:
   app_name:
     required: true
-  style_exclude:
-    description: 'Directories excluded from style checks'
+  exclude_paths:
+    description: 'Paths excluded from style checks'
     required: false
-    default: 'migrations'
+    default: ''
   license:
     description: 'License to check'
     required: false
@@ -26,9 +26,9 @@ runs:
       shell: bash
       run: |
         pip install pycodestyle
-        pycodestyle ${{ inputs.app_name }}/ --exclude=${{ inputs.style_exclude }}
+        pycodestyle ${{ inputs.app_name }}/ --exclude=${{ inputs.exclude_paths }}
 
-    - name: Check for license headers
+    - name: Check for License Headers
       shell: bash
       run: >-
         find ${{ inputs.app_name }} -type f -size +0 -name "*.py"
