@@ -33,4 +33,4 @@ runs:
       run: >-
         find ${{ inputs.app_name }} -type f -size +0 -name "*.py"
         -exec grep -L "SPDX-License-Identifier: ${{ inputs.license }}" {} \;
-        -exec grep -L "Copyright $(date, +'%Y') ${{ inputs.copyright_owner }}" {} \;
+        -exec grep -L "Copyright $(date +'%Y') ${{ inputs.copyright_owner }}" {} \;
