@@ -24,17 +24,21 @@ runs:
   steps:
     - name: Run Pycodestyle
       shell: bash
-      run: |
-        pip install pycodestyle
-        pycodestyle ${{ inputs.app_name }}/ --exclude=${{ inputs.exclude_paths }}
+      run: >-
+        if [[ ! -f "./Dockerfile" ]]; then
+          pip install pycodestyle
+          pycodestyle ${{ inputs.app_name }}/ --exclude=${{ inputs.exclude_paths }}
+        fi
 
     - name: Check for License Headers
       shell: bash
       run: >-
-        LICENSE_ERR=$(find ${{ inputs.app_name }} -type f -size +0 -name "*.py"\
-          -exec grep -PzL "# Copyright $(date +'%Y') ${{ inputs.copyright_owner }}\n# SPDX-License-Identifier: ${{ inputs.license }}" {} \;)
-        if [[ ! -z $LICENSE_ERR ]]; then
-          echo "Missing License or Copyright information:"
-          echo "$LICENSE_ERR"
-          exit 1
+        if [[ -f "./LICENSE" ]]; then
+          LICENSE_ERR=$(find ${{ inputs.app_name }} -type f -size +0 -name "*.py"\
+            -exec grep -PzL "# Copyright $(date +'%Y') ${{ inputs.copyright_owner }}\n# SPDX-License-Identifier: ${{ inputs.license }}" {} \;)
+          if [[ ! -z $LICENSE_ERR ]]; then
+            echo "Missing License or Copyright information:"
+            echo "$LICENSE_ERR"
+            exit 1
+          fi
         fi
