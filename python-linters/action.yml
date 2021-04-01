@@ -34,7 +34,7 @@ runs:
       shell: bash
       run: >-
         if [[ -f "./LICENSE" ]]; then
-          LICENSE_ERR=$(find ${{ inputs.app_name }} -type f -size +0 -name "*.py"\
+          LICENSE_ERR=$(find ${{ inputs.app_name }} -type f -size +0 -not -path "*/migrations/*" -name "*.py"\
             -exec grep -PzL "# Copyright $(date +'%Y') ${{ inputs.copyright_owner }}\n# SPDX-License-Identifier: ${{ inputs.license }}" {} \;)
           if [[ ! -z $LICENSE_ERR ]]; then
             echo "Missing License or Copyright information:"
