@@ -55,6 +55,10 @@ inputs:
     description: 'Prune release manifests'
     required: false
     default: false
+  prune_flux_preserve_count:
+    description: 'Number of flux repo branches to preserve when pruning'
+    required: false
+    default: 4
 
 runs:
   using: 'composite'
@@ -253,10 +257,10 @@ runs:
       shell: bash
       run: |
         cd $FLUX_LOCAL_DIR
-        PRUNE_REFS=$(git for-each-ref --sort='-*authordate' --format='%(refname:short)' "refs/remotes/origin/${FLUX_RELEASE_BRANCH}/" | tail -n +4)
+        PRUNE_REFS=$(git for-each-ref --sort='-*authordate' --format='%(refname:short)' "refs/remotes/origin/${FLUX_RELEASE_BRANCH}/" | tail -n +${{ inputs.prune_flux_preserve_count }})
 
         if [[ $PRUNE_FLUX_REPOSITORY == 'true' ]] ; then
-          echo "Pruning stale manifest branches:"
+          echo "Pruning (n - ${{ inputs.prune_flux_preserve_count }}) stale manifest branches:"
           echo "${PRUNE_REFS}"
           # echo "$PRUNE_REFS" | xargs git push --delete origin
         else
