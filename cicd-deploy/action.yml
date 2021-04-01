@@ -58,7 +58,7 @@ inputs:
   prune_flux_preserve_count:
     description: 'Number of flux repo branches to preserve when pruning'
     required: false
-    default: 4
+    default: 2
 
 runs:
   using: 'composite'
@@ -257,7 +257,8 @@ runs:
       shell: bash
       run: |
         cd $FLUX_LOCAL_DIR
-        PRUNE_REFS=$(git for-each-ref --sort='-creatordate' --format='%(refname:short)' "refs/remotes/origin/${FLUX_RELEASE_BRANCH}/" | tail -n +${{ inputs.prune_flux_preserve_count }})
+        PRUNE_PRESERVE=$(expr 2 + ${{ inputs.prune_flux_preserve_count }})
+        PRUNE_REFS=$(git for-each-ref --merged master --sort='-creatordate' --format='%(refname:short)' "refs/remotes/origin/${FLUX_RELEASE_BRANCH}/" | tail -n +${PRUNE_PRESERVE})
 
         if [[ $PRUNE_FLUX_REPOSITORY == 'true' ]] ; then
           echo "Pruning (n - ${{ inputs.prune_flux_preserve_count }}) stale manifest branches:"
