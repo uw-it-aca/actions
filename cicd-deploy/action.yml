@@ -50,7 +50,17 @@ inputs:
     #    CKV_K8S_21 - default namespace policy
     #    CKV_K8S_35 - secret files preferred over environment
     #    CKV_K8S_43 - image reference by digest
-    default: 'CKV_K8S_21,CKV_K8S_35,CKV_K8S_43'
+    #    CKV_K8S_106 - terminated-pod-gc-threshold set by MCI
+    #    CKV_K8S_107 - kubernetes infrastructure profiling controlled by MCI
+    default: 'CKV_K8S_21,CKV_K8S_35,CKV_K8S_43,CKV_K8S_106,CKV_K8S_107'
+  prune_flux_repository:
+    description: 'Prune release manifests'
+    required: false
+    default: false
+  prune_flux_preserve_count:
+    description: 'Number of flux repo branches to preserve when pruning'
+    required: false
+    default: 2
 
 runs:
   using: 'composite'
@@ -102,7 +112,10 @@ runs:
         FLUX_REPO_PATH=uw-it-aca/$FLUX_REPO_NAME
         echo "FLUX_REPO_PATH=$FLUX_REPO_PATH" >> $GITHUB_ENV
 
-        FLUX_RELEASE_BRANCH_NAME=release/${FLUX_INSTANCE}/${{ inputs.release_name }}/${{ inputs.commit_hash }}
+        FLUX_RELEASE_BRANCH=release/${FLUX_INSTANCE}/${{ inputs.release_name }}
+        echo "FLUX_RELEASE_BRANCH=$FLUX_RELEASE_BRANCH" >> $GITHUB_ENV
+
+        FLUX_RELEASE_BRANCH_NAME=${FLUX_RELEASE_BRANCH}/${{ inputs.commit_hash }}
         echo "FLUX_RELEASE_BRANCH_NAME=$FLUX_RELEASE_BRANCH_NAME" >> $GITHUB_ENV
 
         FLUX_RELEASE_MANIFEST=releases/${FLUX_INSTANCE}/$MANIFEST_FILE_NAME
@@ -169,7 +182,7 @@ runs:
         echo "::add-mask::${{ inputs.gh_auth_token }}"
         echo "CLONE flux repository ${FLUX_REPO_PATH}"
 
-        git clone --depth 1 https://${{ inputs.gh_auth_token }}@github.com/${FLUX_REPO_PATH}.git --branch master ${FLUX_LOCAL_DIR}
+        git clone https://${{ inputs.gh_auth_token }}@github.com/${FLUX_REPO_PATH}.git --branch master ${FLUX_LOCAL_DIR}
 
     - name: Create Flux Release Branch
       shell: bash
@@ -238,4 +251,25 @@ runs:
           echo "MERGING ${FLUX_PULL_URL}"
           GITHUB_API_MERGE="$(jq --raw-output '.url' ${FLUX_PR_OUTPUT})/merge"
           curl -H "Authorization: Token ${{ inputs.gh_auth_token }}" -H "Content-type: application/json" -X PUT $GITHUB_API_MERGE -d @- <<<${MERGE_DATA}
+        fi
+
+    - name: Prune Flux Repo
+      env:
+        PRUNE_FLUX_REPOSITORY: ${{ inputs.prune_flux_repository }}
+      shell: bash
+      run: |
+        cd $FLUX_LOCAL_DIR
+        PRUNE_PRESERVE=$(expr 2 + ${{ inputs.prune_flux_preserve_count }})
+        PRUNE_REFS=$(git for-each-ref --merged master --sort='-creatordate' --format='%(refname:strip=3)' "refs/remotes/origin/${FLUX_RELEASE_BRANCH}/" | tail -n +${PRUNE_PRESERVE})
+        if [[ -n $PRUNE_REFS ]]; then
+          if [[ $PRUNE_FLUX_REPOSITORY == 'true' ]] ; then
+            echo "Pruning $(echo "${PRUNE_REFS}" | wc -l) stale manifest branches:"
+            echo "${PRUNE_REFS}"
+            echo "${PRUNE_REFS}" | xargs git push --delete origin
+          else
+            echo "The following branches are stale (${PRUNE_FLUX_REPOSITORY}):"
+            echo "${PRUNE_REFS}"
+          fi
+        else
+          echo "There are currently no stale branches to prune."
         fi
