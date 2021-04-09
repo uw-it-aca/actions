@@ -266,7 +266,7 @@ runs:
           if [[ $PRUNE_FLUX_REPOSITORY == 'true' ]] ; then
             echo "Pruning (n - ${{ inputs.prune_flux_preserve_count }}) stale manifest branches:"
             echo "${PRUNE_REFS}"
-            # echo "$PRUNE_REFS" | xargs git push --delete origin
+            # echo "${PRUNE_REFS}" | xargs git push --delete
           else
             echo "The following branches are stale (${PRUNE_FLUX_REPOSITORY}):"
             echo "${PRUNE_REFS}"
