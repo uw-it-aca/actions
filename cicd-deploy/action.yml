@@ -260,13 +260,12 @@ runs:
       run: |
         cd $FLUX_LOCAL_DIR
         PRUNE_PRESERVE=$(expr 2 + ${{ inputs.prune_flux_preserve_count }})
-        PRUNE_REFS=$(git for-each-ref --merged master --sort='-creatordate' --format='%(refname:short)' "refs/remotes/origin/${FLUX_RELEASE_BRANCH}/" | tail -n +${PRUNE_PRESERVE})
-
+        PRUNE_REFS=$(git for-each-ref --merged master --sort='-creatordate' --format='delete %(refname)' "refs/remotes/origin/${FLUX_RELEASE_BRANCH}/" | tail -n +${PRUNE_PRESERVE})
         if [[ -n $PRUNE_REFS ]]; then
           if [[ $PRUNE_FLUX_REPOSITORY == 'true' ]] ; then
             echo "Pruning $(echo "${PRUNE_REFS}" | wc -l) stale manifest branches:"
             echo "${PRUNE_REFS}"
-            echo "${PRUNE_REFS}" | xargs git push --delete
+            echo "${PRUNE_REFS}" | git update-ref --stdin
           else
             echo "The following branches are stale (${PRUNE_FLUX_REPOSITORY}):"
             echo "${PRUNE_REFS}"
