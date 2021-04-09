@@ -271,5 +271,5 @@ runs:
             echo "${PRUNE_REFS}"
           fi
         else
-          echo "There are currently no old branches to prune."
+          echo "There are currently no stale branches to prune."
         fi
