@@ -97,7 +97,9 @@ runs:
         echo "DEPLOY $APP_NAME in ${GCP_PROJECT}"
         echo "#####################################"
 
-        MANIFEST_FILE_NAME=${{ inputs.release_name }}${FLUX_RELEASE_SUFFIX}.yaml
+        FLUX_BASE_NAME=${{ inputs.release_name }}${FLUX_RELEASE_SUFFIX}
+
+        MANIFEST_FILE_NAME=${FLUX_BASE_NAME}.yaml
         echo "MANIFEST_FILE_NAME=$MANIFEST_FILE_NAME" >> $GITHUB_ENV
 
         LOCAL_MANIFEST=${PWD}/$MANIFEST_FILE_NAME
@@ -112,7 +114,7 @@ runs:
         FLUX_REPO_PATH=uw-it-aca/$FLUX_REPO_NAME
         echo "FLUX_REPO_PATH=$FLUX_REPO_PATH" >> $GITHUB_ENV
 
-        FLUX_RELEASE_BRANCH=release/${FLUX_INSTANCE}/${{ inputs.release_name }}
+        FLUX_RELEASE_BRANCH=release/${FLUX_INSTANCE}/${FLUX_BASE_NAME}
         echo "FLUX_RELEASE_BRANCH=$FLUX_RELEASE_BRANCH" >> $GITHUB_ENV
 
         FLUX_RELEASE_BRANCH_NAME=${FLUX_RELEASE_BRANCH}/${{ inputs.commit_hash }}
