@@ -112,7 +112,7 @@ runs:
         FLUX_REPO_PATH=uw-it-aca/$FLUX_REPO_NAME
         echo "FLUX_REPO_PATH=$FLUX_REPO_PATH" >> $GITHUB_ENV
 
-        FLUX_RELEASE_BRANCH=release/${FLUX_INSTANCE}/${{ inputs.release_name }}
+        FLUX_RELEASE_BRANCH=release/${FLUX_INSTANCE}/${{ inputs.release_name }}${FLUX_RELEASE_SUFFIX}
         echo "FLUX_RELEASE_BRANCH=$FLUX_RELEASE_BRANCH" >> $GITHUB_ENV
 
         FLUX_RELEASE_BRANCH_NAME=${FLUX_RELEASE_BRANCH}/${{ inputs.commit_hash }}
