@@ -56,11 +56,11 @@ inputs:
   prune_flux_repository:
     description: 'Prune release manifests'
     required: false
-    default: false
+    default: true
   prune_flux_preserve_count:
     description: 'Number of flux repo branches to preserve when pruning'
     required: false
-    default: 2
+    default: 6
 
 runs:
   using: 'composite'
