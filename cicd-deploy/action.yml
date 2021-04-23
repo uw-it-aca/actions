@@ -61,6 +61,14 @@ inputs:
     description: 'Number of flux repo branches to preserve when pruning'
     required: false
     default: 6
+  prune_registry:
+    description: 'Prune image registry'
+    required: false
+    default: false
+  prune_registry_preserve_count:
+    description: 'Number of images preserve when pruning registry'
+    required: false
+    default: 6
 
 runs:
   using: 'composite'
@@ -110,8 +118,14 @@ runs:
         echo "HELM_CHART_LOCAL_DIR=$HELM_CHART_LOCAL_DIR" >> $GITHUB_ENV
 
         # flux repository
-        FLUX_REPO_NAME=gcp-flux-${FLUX_INSTANCE}
-        FLUX_REPO_PATH=uw-it-aca/$FLUX_REPO_NAME
+        FLUX_REPO_BASE=gcp-flux-
+        echo "FLUX_REPO_BASE=$FLUX_REPO_BASE" >> $GITHUB_ENV
+
+        FLUX_REPO_OWNER=uw-it-aca
+        echo "FLUX_REPO_OWNER=$FLUX_REPO_OWNER" >> $GITHUB_ENV
+
+        FLUX_REPO_NAME=${FLUX_REPO_BASE}${FLUX_INSTANCE}
+        FLUX_REPO_PATH=${FLUX_REPO_OWNER}/$FLUX_REPO_NAME
         echo "FLUX_REPO_PATH=$FLUX_REPO_PATH" >> $GITHUB_ENV
 
         FLUX_RELEASE_BRANCH=release/${FLUX_INSTANCE}/${FLUX_BASE_NAME}
@@ -140,7 +154,7 @@ runs:
     - name: Clone Helm Chart
       shell: bash
       run: >-
-        export HELM_CHART_REPO_PATH="https://github.com/uw-it-aca/${{ inputs.helm_chart_name }}.git" &&
+        export HELM_CHART_REPO_PATH="https://github.com/${FLUX_REPO_OWNER}/${{ inputs.helm_chart_name }}.git" &&
         echo "CLONE chart repository $HELM_CHART_REPO_PATH (${{ inputs.helm_chart_branch }})" &&
         git clone --depth 1 $HELM_CHART_REPO_PATH
         --branch ${{ inputs.helm_chart_branch }}
@@ -255,7 +269,7 @@ runs:
           curl -H "Authorization: Token ${{ inputs.gh_auth_token }}" -H "Content-type: application/json" -X PUT $GITHUB_API_MERGE -d @- <<<${MERGE_DATA}
         fi
 
-    - name: Prune Flux Repo
+    - name: Prune Flux Repository
       env:
         PRUNE_FLUX_REPOSITORY: ${{ inputs.prune_flux_repository }}
       shell: bash
@@ -275,3 +289,127 @@ runs:
         else
           echo "There are currently no stale branches to prune."
         fi
+
+    - name: Prune Image Registry
+      env:
+        PRUNE_REGISTRY: ${{ inputs.prune_registry }}
+      shell: bash
+      run: |
+        if [[ $PRUNE_REGISTRY == 'true' ]] ; then
+          python3 - <<EOF
+          import os
+          import re
+          import requests
+
+          release_name = "${{ inputs.release_name }}"
+
+          docker_jwt_token = None
+          registry_host = "hub.docker.com"
+
+          # environment variables
+          #   GH_TOKEN - Github auth token
+          #   REGISTRY_USER - Docker image registry owner
+          #   REGISTRY_PASSWORD -  Docker image registry password
+
+          def referenced_tags(release_name):
+              preserve_tags = []
+              for instance in ['dev', 'prod']:
+                  branch_url = ('https://api.github.com/repos/{}/{}{}/'
+                                'branches?page=1&per_page=100').format(
+                      ${FLUX_REPO_OWNER}, ${FLUX_REPO_BASE}, instance)
+                  branch_re = re.compile('^release/{}/{}(-[a-z]+)?/([a-f0-9]+)$'.format(
+                      instance, release_name))
+
+                  while branch_url:
+                      response = requests.get(branch_url, headers={
+                          "Authorization": "Token {}".format(os.getenv('GH_TOKEN')),
+                          "Content-type": "application/vnd.github.v3+json"})
+                      if response.status_code != requests.codes.ok:
+                          print("failed to get branches ({}): {}".format(
+                              response.status_code, branch_url))
+                          exit(1)
+
+                      for branch in response.json():
+                          m = re.match(branch_re, branch['name'])
+                          if m:
+                              preserve_tags.append(m.group(2))
+
+                      try:
+                          branch_url = response.links['next']['url']
+                      except KeyError:
+                          branch_url = None
+
+              return preserve_tags
+
+
+          def registry_tags(release_name):
+              registry_tags = []
+              repo_tag_url = ('https://{}/v2/repositories/{}/{}/tags/'
+                              '?page=1&page_size=100').format(
+                                  registry_host, os.getenv('REGISTRY_USER'), release_name)
+              while True:
+                  raw = requests.get(repo_tag_url)
+                  if raw.status_code != requests.codes.ok:
+                      break
+
+                  response = raw.json()
+                  registry_tags.extend(response['results'])
+                  if response['next']:
+                      repo_tag_url = response['next']
+                  else:
+                      break
+
+              registry_tags.sort(key=lambda x: x['last_updated'])
+              return registry_tags
+
+
+          def docker_jwt_access_token(release_name):
+              global docker_jwt_token
+
+              if docker_jwt_token is None:
+                  docker_registry_url = 'https://{}/v2/users/login/'.format(registry_host)
+                  headers = {'Content-Type': 'application/json'}
+                  raw = requests.post(docker_registry_url, headers=headers, json={
+                      "username": "{}".format(os.getenv('REGISTRY_USER')),
+                      "password": "{}".format(os.getenv('REGISTRY_PASSWORD'))})
+                  if raw.status_code != requests.codes.ok:
+                      raise Exception("Cannot acquire token")
+
+                  docker_jwt_token = raw.json()['token']
+
+              return docker_jwt_token
+
+
+          def delete_image_tag(release_name, tag):
+              delete_url = 'https://{}/v2/repositories/{}/{}/tags/{}/'.format(
+                  registry_host, os.getenv('REGISTRY_USER'),
+                  release_name, tag['name'])
+              headers = {'Authorization': 'JWT {}'.format(
+                  docker_jwt_access_token(release_name))}
+              response = requests.delete(delete_url, headers=headers)
+              if response.status_code != requests.codes.no_content:
+                  raise Exception("failed to delete tag ({}): {}".format(
+                      response.status_code, delete_url))
+
+              print("DELETED: {}".format(delete_url))
+
+
+          if __name__ == '__main__':
+              flux_tags = referenced_tags(release_name)
+
+              if len(flux_tags) < 1:
+                  raise Exception("Bailing because finding no referenced tags is weird.")
+
+              registry_tags = registry_tags(release_name)
+
+              for tag in registry_tags:
+                  if tag['name'] in flux_tags:
+                      flux_tags.remove(tag['name'])
+                  else:
+                      delete_image_tag(release_name, tag)
+                      # just delete one while we're debugging
+                      break
+
+              if len(flux_tags) > 0:
+                  print("Flux references with no corresponding image: {}".format(flux_tags))
+          EOF
