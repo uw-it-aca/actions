@@ -418,4 +418,5 @@ runs:
                   print("Image pruning problem: {}".format(ex))
 
               raise SystemExit(0)
-          EOF
+        EOF
+        fi
