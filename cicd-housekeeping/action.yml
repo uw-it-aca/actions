@@ -11,22 +11,22 @@ inputs:
     description: 'Github auth token for Flux repository'
     required: true
   context:
-    description: 'Configuration and derived values for deployment'
+    description: 'Configuration and derived values from deployment phase'
     required: true
 
 # overridable defaults
   prune_flux_repository:
     description: 'Actually prune release manifests'
     required: false
-    default: false
+    default: true
   prune_flux_preserve_count:
     description: 'Number of flux repo branches to preserve when pruning'
     required: false
     default: 6
   prune_image_registry:
-    description: 'Prune image registry'
+    description: 'Actually Prune docker image registry'
     required: false
-    default: false
+    default: true
 
 runs:
   using: 'composite'
@@ -46,8 +46,7 @@ runs:
         # pull in input.context
         while read -r -a kv; do
           set_context ${kv[0]} ${kv[1]}
-        done <<< "$(echo ${{ inputs.context }} \
-                  | jq -r 'keys[] as $k | "\($k) \(.[$k])"')"
+        done <<< "$(echo ${{ inputs.context }} | jq -r 'keys[] as $k | "\($k) \(.[$k])"')"
 
         set_context flux_local_dir ${PWD}/${FLUX_REPO_NAME}
 
@@ -61,7 +60,7 @@ runs:
 
         git clone https://${GH_AUTH_TOKEN}@github.com/${FLUX_REPO_PATH}.git --branch master $FLUX_LOCAL_DIR
 
-    - name: Gather stale branches associated with ${FLUX_RELEASE_BRANCH}
+    - name: Gather stale branches
       id: references
       shell: bash
       run: |
@@ -71,9 +70,9 @@ runs:
         PRUNE_REFS=$(git for-each-ref --merged master --sort='-creatordate' --format='%(refname:strip=3)' "refs/remotes/origin/${FLUX_RELEASE_BRANCH}/" | tail -n +${PRUNE_PRESERVE})
 
         if [[ -n $PRUNE_REFS ]]; then
-          echo "The following branches are stale:"
+          echo "Stale ${FLUX_RELEASE_BRANCH} branches have been found:"
           echo "${PRUNE_REFS}"
-          echo "::set-output name=prune_references::${PRUNE_REFS}"
+          echo "${PRUNE_REFS}" >> $GITHUB_ENV
         else
           echo "There are currently no stale branches to prune."
         fi
@@ -84,10 +83,10 @@ runs:
       run: |
         cd $FLUX_LOCAL_DIR
 
-        if [[ -n "${{ steps.references.outputs.prune_references}}" ]]; then
+        if [[ -n "${PRUNE_REFS}" ]]; then
           echo "WOULD git push delete:"
-          echo "${{ steps.references.outputs.prune_references}}"
-          #### echo "${{ steps.references.outputs.prune_references}}" | xargs git push --delete origin
+          echo "${PRUNE_REFS}}"
+          #### echo "${PRUNE_REFS}}" | xargs git push --delete origin
         fi
 
     - name: Prune Image Registry
@@ -184,12 +183,11 @@ runs:
                 release_name, tag['name'])
             headers = {'Authorization': 'JWT {}'.format(
                 docker_jwt_access_token(release_name))}
+            print("Deleting tag: {}".format(delete_url))
             response = requests.delete(delete_url, headers=headers)
-            if response.status_code == requests.codes.no_content:
-                print("DELETED: {}".format(delete_url))
-
-            raise Exception("failed to delete tag ({}): {}".format(
-                response.status_code, delete_url))
+            if response.status_code != requests.codes.no_content:
+                raise Exception("failed to delete tag ({}): {}".format(
+                    response.status_code, delete_url))
 
 
         if __name__ == '__main__':
@@ -199,10 +197,13 @@ runs:
                 if len(flux_tags) < 1:
                     raise Exception("Bailing because finding no referenced tags is weird.")
 
+                print("Flux referenced tags: {}".format(flux_tags))
+
                 registry_tags = registry_tags(release_name)
 
                 for tag in registry_tags:
                     if tag['name'] in flux_tags:
+                        print("Preserving image tagged {}".formats(tag['name']))
                         flux_tags.remove(tag['name'])
                     else:
                         delete_image_tag(release_name, tag)

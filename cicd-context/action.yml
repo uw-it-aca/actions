@@ -49,10 +49,10 @@ runs:
         }
 
         set_context full_commit_hash "${{ github.sha }}"
-        set_context commit_hash "${FULL_COMMIT_HASH:0:${{ inputs.commit_hash_length }}}"
-        set_context image_tag   "${{ inputs.release_name }}:$COMMIT_HASH"
-        set_context github_ref  "${{ github.ref }}"
-        set_context git_repo_branch ${GITHUB_REF#refs/heads/}
+        set_context commit_hash      "${FULL_COMMIT_HASH:0:${{ inputs.commit_hash_length }}}"
+        set_context image_tag        "${{ inputs.release_name }}:$COMMIT_HASH"
+        set_context github_ref       "${{ github.ref }}"
+        set_context git_repo_branch  "${GITHUB_REF#refs/heads/}"
 
         JSON_CONTEXT=\'{${JSON_CONTEXT}}\'
         echo "json_context = $JSON_CONTEXT"

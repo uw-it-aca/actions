@@ -3,18 +3,21 @@ name: 'CI/CD Deploy'
 description: 'Deployment image via flux repository configured to appropriate GCP project'
 
 inputs:
-  # required inputs
+# required inputs
   release_name:
     description: 'Application name to use for release'
     required: true
   gh_auth_token:
     description: 'Github auth token for Flux deployment repository'
     required: true
-  context:
-    description: 'JSON build context (see cicd-context for defined keys)'
+  commit_hash:
+    description: 'Application repository hash applied to release'
+    required: true
+  git_repo_branch:
+    description: 'Application repository branch to release'
     required: true
 
-# below are overridable defaults
+# overridable defaults
   app_instance:
     description: 'Instance name applied to deployment, typically '
     required: false
@@ -87,11 +90,8 @@ runs:
           JSON_CONTEXT="${JSON_CONTEXT}${COMMA}\"${1}\": \"${2}\""
         }
 
-        # pull in input.context
-        while read -r -a kv; do
-          set_context ${kv[0]} ${kv[1]}
-        done <<< "$(echo ${{ inputs.context }} \
-                  | jq -r 'keys[] as $k | "\($k) \(.[$k])"')"
+        set_context commit_hash ${{ inputs.commit_hash }}
+        set_context git_repo_branch ${{ inputs.git_repo_branch }}
 
         # master/main branch hardwired to prod GCP instance and "prod" app instance
         case ${GIT_REPO_BRANCH} in
@@ -113,8 +113,8 @@ runs:
         esac
 
         # set up deploy context
-        set_context app_instance ${APP_INSTANCE}
-        set_context app_name ${{ inputs.release_name }}-prod-${APP_INSTANCE}
+        set_context app_instance             ${APP_INSTANCE}
+        set_context app_name                 ${{ inputs.release_name }}-prod-${APP_INSTANCE}
         set_context flux_base_name           ${{ inputs.release_name }}${FLUX_RELEASE_SUFFIX}
         set_context manifest_file_name       ${FLUX_BASE_NAME}.yaml
         set_context manifest_file_name       $MANIFEST_FILE_NAME
@@ -129,12 +129,8 @@ runs:
         set_context flux_release_manifest    releases/${FLUX_INSTANCE}/$MANIFEST_FILE_NAME
         set_context flux_local_dir           ${PWD}/$FLUX_REPO_NAME
         set_context flux_pr_output           ${PWD}/pr-${FLUX_INSTANCE}-${{ inputs.release_name }}-${COMMIT_HASH}.json
-
-        # flux commit messages
-        COMMIT_MESSAGE="Automated ${FLUX_INSTANCE} deploy of ${{ github.repository }}:${COMMIT_HASH} build ${{ github.run_id }}"
-        echo "COMMIT_MESSAGE=$COMMIT_MESSAGE" >> $GITHUB_ENV
-        PULL_REQUEST_MESSAGE="Automated ${FLUX_INSTANCE} deploy of [${{ github.repository }}:${COMMIT_HASH}](/${{ github.repository }}/commit/${COMMIT_HASH})  Generated build [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
-        echo "PULL_REQUEST_MESSAGE=$PULL_REQUEST_MESSAGE" >> $GITHUB_ENV
+        set_context commit_message           "Automated ${FLUX_INSTANCE} deploy of ${{ github.repository }}:${COMMIT_HASH} build ${{ github.run_id }}"
+        set_context pull_request_message     "Automated ${FLUX_INSTANCE} deploy of [${{ github.repository }}:${COMMIT_HASH}](/${{ github.repository }}/commit/${COMMIT_HASH})  Generated build [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
 
         JSON_CONTEXT=\'{${JSON_CONTEXT}}\'
         echo "json_context = $JSON_CONTEXT"
@@ -192,7 +188,7 @@ runs:
         echo "::add-mask::${{ inputs.gh_auth_token }}"
         echo "CLONE flux repository ${FLUX_REPO_PATH}"
 
-        git clone --level 1 https://${{ inputs.gh_auth_token }}@github.com/${FLUX_REPO_PATH}.git --branch master ${FLUX_LOCAL_DIR}
+        git clone https://${{ inputs.gh_auth_token }}@github.com/${FLUX_REPO_PATH}.git --branch master ${FLUX_LOCAL_DIR}
 
     - name: Create Flux Release Branch
       shell: bash
