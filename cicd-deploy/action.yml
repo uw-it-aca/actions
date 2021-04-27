@@ -83,8 +83,8 @@ runs:
         export JSON_CONTEXT=""
 
         function set_context {
-          export ${1^^}='${2}'
-          echo "${1^^}=${2}" >> $GITHUB_ENV
+          export ${1^^}="${2}"
+          echo "${1^^}=\"${2}\"" >> $GITHUB_ENV
           if [[ -n $JSON_CONTEXT ]]; then COMMA=", " ; else COMMA="" ; fi
           JSON_CONTEXT="${JSON_CONTEXT}${COMMA}\"${1}\": \"${2}\""
           echo "$1 = ${2}"
