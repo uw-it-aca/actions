@@ -1,15 +1,21 @@
 name: 'CI/CD Housekeeping'
 
-description: 'Manage build and deployment artifact '
+description: 'Manage artifacts from build and deploy processses'
 
 inputs:
   release_name:
     description: 'Application name to use for release'
     required: true
+  gh_auth_token:
+    description: 'Github auth token for Flux repository'
+    required: true
+  context:
+    description: 'Config and derived values to support deployment'
+    required: true
   prune_flux_repository:
-    description: 'Prune release manifests'
+    description: 'Actually prune release manifests'
     required: false
-    default: true
+    default: false
   prune_flux_preserve_count:
     description: 'Number of flux repo branches to preserve when pruning'
     required: false
@@ -18,43 +24,59 @@ inputs:
     description: 'Prune image registry'
     required: false
     default: false
-  prune_registry_preserve_count:
-    description: 'Number of images preserve when pruning registry'
-    required: false
-    default: 6
 
 runs:
   using: 'composite'
 
   steps:
-    - name: Prune Flux Repository
-      env:
-        PRUNE_FLUX_REPOSITORY: ${{ inputs.prune_flux_repository }}
+    - name: Setup Context
+      shell: bash
+      run: |
+        FLUX_LOCAL_DIR=${PWD}/${{ inputs.context.flux_repo_name }}
+        echo "FLUX_LOCAL_DIR=$FLUX_LOCAL_DIR" >> $GITHUB_ENV
+
+    - name: Clone Flux Repository
+      shell: bash
+      run: |
+        echo "::add-mask::${{ inputs.gh_auth_token }}"
+        echo "Prune ${{ inputs.context.flux_repo_path }} repository"
+
+        git clone https://${{ inputs.gh_auth_token }}@github.com/${{ inputs.context.flux_repo_path }}.git --branch master $FLUX_LOCAL_DIR
+
+    - name: Gather stale branches associated with ${{ inputs.context.flux_release_branch }}
+      id: references
       shell: bash
       run: |
         cd $FLUX_LOCAL_DIR
+
         PRUNE_PRESERVE=$(expr 2 + ${{ inputs.prune_flux_preserve_count }})
-        PRUNE_REFS=$(git for-each-ref --merged master --sort='-creatordate' --format='%(refname:strip=3)' "refs/remotes/origin/${FLUX_RELEASE_BRANCH}/" | tail -n +${PRUNE_PRESERVE})
+        PRUNE_REFS=$(git for-each-ref --merged master --sort='-creatordate' --format='%(refname:strip=3)' "refs/remotes/origin/${{ inputs.context.flux_release_branch }}/" | tail -n +${PRUNE_PRESERVE})
+
         if [[ -n $PRUNE_REFS ]]; then
-          if [[ $PRUNE_FLUX_REPOSITORY == 'true' ]] ; then
-            echo "Pruning $(echo "${PRUNE_REFS}" | wc -l) stale manifest branches:"
-            echo "${PRUNE_REFS}"
-            echo "${PRUNE_REFS}" | xargs git push --delete origin
-          else
-            echo "The following branches are stale (${PRUNE_FLUX_REPOSITORY}):"
-            echo "${PRUNE_REFS}"
-          fi
+          echo "The following branches are stale:"
+          echo "${PRUNE_REFS}"
+          echo "::set-output name=prune_references::${PRUNE_REFS}"
         else
           echo "There are currently no stale branches to prune."
         fi
 
+    - name: Prune Flux Repository
+      shell: bash
+      if: inputs.prune_flux_repository
+      run: |
+        cd $FLUX_LOCAL_DIR
+
+        if [[ -n "${{ steps.references.outputs.prune_references}}" ]]; then
+          echo "WOULD git push delete:"
+          echo "${{ steps.references.outputs.prune_references}}"
+          #### echo "${{ steps.references.outputs.prune_references}}" | xargs git push --delete origin
+        fi
+
     - name: Prune Image Registry
-      env:
-        PRUNE_REGISTRY: ${{ inputs.prune_image_registry }}
+      if: inputs.prune_image_registry
       shell: bash
       run: |
-        if [[ $PRUNE_REGISTRY == 'true' ]] ; then
-          python3 - <<EOF
+        python3 - <<EOF
         import os
         import re
         import requests
@@ -74,7 +96,7 @@ runs:
             for instance in ['dev', 'prod']:
                 branch_url = ('https://api.github.com/repos/{}/{}{}/'
                               'branches?page=1&per_page=100').format(
-                    ${FLUX_REPO_OWNER}, ${FLUX_REPO_BASE}, instance)
+                    ${{ inputs.context.flux_repo_owner }}, ${{ inputs.context.flux_repo_base }}, instance)
                 branch_re = re.compile('^release/{}/{}(-[a-z]+)?/([a-f0-9]+)$'.format(
                     instance, release_name))
 
@@ -177,4 +199,3 @@ runs:
 
             raise SystemExit(0)
         EOF
-        fi

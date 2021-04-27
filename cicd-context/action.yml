@@ -10,17 +10,19 @@ inputs:
     description: 'Length of application commit hash used as image tag'
     required: false
     default: 7
+  flux_repo_base:
+    description: 'Flux repository base name'
+    required: false
+    default: gcp-flux-
+  flux_repo_owner:
+    description: 'Flux repository owner'
+    required: false
+    default: uw-it-aca
 
 outputs:
-  commit_hash:
-    description: "Id used to trace commit through containerization and deployment"
-    value: ${{ steps.context.outputs.commit_hash }}
-  image_tag:
-    description: "Docker image tag for deployment"
-    value: ${{ steps.context.outputs.image_tag }}
-  git_repo_branch:
-    description: "Short Github repository branch name"
-    value: ${{ steps.context.outputs.git_repo_branch }}
+  json_context:
+    description: "Serialized JSON context for this release"
+    value: ${{ steps.context.outputs.json_context }}
 
 runs:
   using: 'composite'
@@ -32,18 +34,61 @@ runs:
       run: |
         echo "::group::Context"
 
+        JSON_CONTEXT="{"
+
         export FULL_COMMIT_HASH="${{ github.sha }}"
         export COMMIT_HASH="${FULL_COMMIT_HASH:0:${{ inputs.commit_hash_length }}}"
-        echo "::set-output name=commit_hash::${COMMIT_HASH}"
+        JSON_CONTEXT="${JSON_CONTEXT}\"commit_hash\": \"${COMMIT_HASH}\""
+        # echo "::set-output name=commit_hash::${COMMIT_HASH}"
         echo "commit_hash = ${COMMIT_HASH}"
 
         export IMAGE_TAG="${{ inputs.release_name }}:$COMMIT_HASH"
-        echo "::set-output name=image_tag::${IMAGE_TAG}"
+        JSON_CONTEXT="${JSON_CONTEXT};\"image_tag\": \"${IMAGE_TAG}\""
+        # echo "::set-output name=image_tag::${IMAGE_TAG}"
         echo "image_tag = ${IMAGE_TAG}"
 
         export GITHUB_REF="${{ github.ref }}"
         GIT_REPO_BRANCH=${GITHUB_REF#refs/heads/}
-        echo "::set-output name=git_repo_branch::${GIT_REPO_BRANCH}"
+        JSON_CONTEXT="${JSON_CONTEXT};\"git_repo_branch\": \"${GIT_REPO_BRANCH}\""
+        # echo "::set-output name=git_repo_branch::${GIT_REPO_BRANCH}"
         echo "git_repo_branch = ${GIT_REPO_BRANCH}"
 
+        FLUX_REPO_BASE=${{ inputs.flux_repo_base }}
+        JSON_CONTEXT="${JSON_CONTEXT};\"flux_repo_base\": \"${FLUX_REPO_BASE}\""
+        # echo "::set-output name=flux_repo_base::${FLUX_REPO_BASE}"
+        echo "flux_repo_base = $FLUX_REPO_BASE"
+
+        FLUX_REPO_OWNER=${{ inputs.flux_repo_owner }}
+        JSON_CONTEXT="${JSON_CONTEXT};\"flux_repo_owner\": \"${FLUX_REPO_OWNER}\""
+        # echo "::set-output name=flux_repo_owner::${FLUX_REPO_OWNER}"
+        echo "flux_repo_owner = $FLUX_REPO_OWNER"
+
+        FLUX_REPO_NAME=${FLUX_REPO_BASE}${FLUX_INSTANCE}
+        JSON_CONTEXT="${JSON_CONTEXT};\"flux_repo_name\": \"${FLUX_REPO_NAME}\""
+        echo "flux_repo_name = ${FLUX_REPO_NAME}"
+
+        FLUX_REPO_PATH=${FLUX_REPO_OWNER}/$FLUX_REPO_NAME
+        JSON_CONTEXT="${JSON_CONTEXT};\"flux_repo_path\": \"${FLUX_REPO_PATH}\""
+        #echo "::set-output name=flux_repo_path::${FLUX_REPO_PATH}"
+        echo "flux_repo_path= $FLUX_REPO_PATH"
+
+        FLUX_RELEASE_BRANCH=release/${FLUX_INSTANCE}/${FLUX_BASE_NAME}
+        JSON_CONTEXT="${JSON_CONTEXT};\"flux_release_branch\": \"${FLUX_RELEASE_BRANCH}\""
+        #echo "::set-output name=flux_release_branch::${FLUX_RELEASE_BRANCH}"
+        echo "flux_release_branch = $FLUX_RELEASE_BRANCH"
+
+        FLUX_RELEASE_BRANCH_NAME=${FLUX_RELEASE_BRANCH}/${{ inputs.commit_hash }}
+        JSON_CONTEXT="${JSON_CONTEXT};\"flux_release_branch_name\": \"${FLUX_RELEASE_BRANCH_NAME}\""
+        #echo "::set-output name=flux_release_branch_name::${FLUX_RELEASE_BRANCH_NAME}"
+        echo "flux_release_branch_name = $FLUX_RELEASE_BRANCH_NAME"
+
+        FLUX_RELEASE_MANIFEST=releases/${FLUX_INSTANCE}/$MANIFEST_FILE_NAME
+        JSON_CONTEXT="${JSON_CONTEXT};\"flux_release_manifest\": \"${FLUX_RELEASE_MANIFEST}\""
+        #echo "FLUX_RELEASE_MANIFEST=$FLUX_RELEASE_MANIFEST" >> $GITHUB_ENV
+        echo "flux_release_manifest = $FLUX_RELEASE_MANIFEST"
+
+        JSON_CONTEXT = "${JSON_CONTEXT}}"
+
         echo "::endgroup::"
+
+        echo "::set-output name=json_context::${JSON_CONTEXT}"
