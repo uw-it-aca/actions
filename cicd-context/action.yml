@@ -40,5 +40,9 @@ runs:
         set_context image_tag   "${{ inputs.release_name }}:$COMMIT_HASH"
         set_context github_ref  "${{ github.ref }}"
 
+        JSON_CONTEXT=\'{${JSON_CONTEXT}}\'
+
+        echo "json_context = $JSON_CONTEXT"
+
         echo "::endgroup::"
-        echo "::set-output name=json_context::{${JSON_CONTEXT}}"
+        echo "::set-output name=json_context::${JSON_CONTEXT}"

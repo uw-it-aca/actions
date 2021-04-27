@@ -137,7 +137,7 @@ runs:
         echo "PULL_REQUEST_MESSAGE=$PULL_REQUEST_MESSAGE" >> $GITHUB_ENV
 
         echo "::endgroup::"
-        echo "::set-output name=json_context::{${JSON_CONTEXT}}"
+        echo "::set-output name=json_context::\'{${JSON_CONTEXT}}\'"
 
         echo "#####################################"
         echo "DEPLOY $APP_NAME in ${GCP_PROJECT}"
