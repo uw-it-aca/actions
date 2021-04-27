@@ -35,19 +35,17 @@ runs:
         echo "commit_hash = ${COMMIT_HASH}"
 
         export IMAGE_TAG="${{ inputs.release_name }}:$COMMIT_HASH"
-        JSON_CONTEXT="${JSON_CONTEXT};\"image_tag\": \"${IMAGE_TAG}\""
+        JSON_CONTEXT="${JSON_CONTEXT},\"image_tag\": \"${IMAGE_TAG}\""
         # echo "::set-output name=image_tag::${IMAGE_TAG}"
         echo "image_tag = ${IMAGE_TAG}"
 
         export GITHUB_REF="${{ github.ref }}"
         GIT_REPO_BRANCH=${GITHUB_REF#refs/heads/}
-        JSON_CONTEXT="${JSON_CONTEXT};\"git_repo_branch\": \"${GIT_REPO_BRANCH}\""
+        JSON_CONTEXT="${JSON_CONTEXT},\"git_repo_branch\": \"${GIT_REPO_BRANCH}\""
         # echo "::set-output name=git_repo_branch::${GIT_REPO_BRANCH}"
         echo "git_repo_branch = ${GIT_REPO_BRANCH}"
 
         JSON_CONTEXT="${JSON_CONTEXT}}"
-
-        echo "${JSON_CONTEXT}"
 
         echo "::endgroup::"
 

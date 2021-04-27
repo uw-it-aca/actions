@@ -103,11 +103,11 @@ runs:
           export ${1^^}=${2}
           echo "${1^^}=${2}" >> $GITHUB_ENV
           if [[ -n $JSON_CONTEXT]]; then
-            COLON=";"
+            COMMA=","
           else
-            COLON=""
+            COMMA=""
           fi
-          JSON_CONTEXT="${JSON_CONTEXT}${COLON}\"${1}\": \"${2}\""
+          JSON_CONTEXT="${JSON_CONTEXT}${COMMA}\"${1}\": \"${2}\""
         }
 
         set_context app_instance ${APP_INSTANCE}
