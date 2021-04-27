@@ -3,6 +3,7 @@ name: 'CI/CD Housekeeping'
 description: 'Manage artifacts from build and deploy processses'
 
 inputs:
+# required inputs
   release_name:
     description: 'Application name to use for release'
     required: true
@@ -10,8 +11,10 @@ inputs:
     description: 'Github auth token for Flux repository'
     required: true
   context:
-    description: 'Config and derived values to support deployment'
+    description: 'Configuration and derived values for deployment'
     required: true
+
+# overridable defaults
   prune_flux_repository:
     description: 'Actually prune release manifests'
     required: false
@@ -31,26 +34,41 @@ runs:
   steps:
     - name: Setup Context
       shell: bash
+      id: context
       run: |
-        FLUX_LOCAL_DIR=${PWD}/${{ inputs.context.flux_repo_name }}
-        echo "FLUX_LOCAL_DIR=$FLUX_LOCAL_DIR" >> $GITHUB_ENV
+        echo "::group::Context"
+
+        function set_context {
+          echo "$1 = $2"
+          echo "${1^^}=${2}" >> $GITHUB_ENV
+        }
+
+        # pull in input.context
+        while read -r -a kv; do
+          set_context ${kv[0]} ${kv[1]}
+        done <<< "$(echo ${{ inputs.context }} \
+                  | jq -r 'keys[] as $k | "\($k) \(.[$k])"')"
+
+        set_context flux_local_dir ${PWD}/${FLUX_REPO_NAME}
+
+        echo "::endgroup::"
 
     - name: Clone Flux Repository
       shell: bash
       run: |
-        echo "::add-mask::${{ inputs.gh_auth_token }}"
-        echo "Prune ${{ inputs.context.flux_repo_path }} repository"
+        echo "::add-mask::${GH_AUTH_TOKEN}"
+        echo "Prune ${FLUX_REPO_PATH} repository"
 
-        git clone https://${{ inputs.gh_auth_token }}@github.com/${{ inputs.context.flux_repo_path }}.git --branch master $FLUX_LOCAL_DIR
+        git clone https://${GH_AUTH_TOKEN}@github.com/${FLUX_REPO_PATH}.git --branch master $FLUX_LOCAL_DIR
 
-    - name: Gather stale branches associated with ${{ inputs.context.flux_release_branch }}
+    - name: Gather stale branches associated with ${FLUX_RELEASE_BRANCH}
       id: references
       shell: bash
       run: |
         cd $FLUX_LOCAL_DIR
 
         PRUNE_PRESERVE=$(expr 2 + ${{ inputs.prune_flux_preserve_count }})
-        PRUNE_REFS=$(git for-each-ref --merged master --sort='-creatordate' --format='%(refname:strip=3)' "refs/remotes/origin/${{ inputs.context.flux_release_branch }}/" | tail -n +${PRUNE_PRESERVE})
+        PRUNE_REFS=$(git for-each-ref --merged master --sort='-creatordate' --format='%(refname:strip=3)' "refs/remotes/origin/${FLUX_RELEASE_BRANCH}/" | tail -n +${PRUNE_PRESERVE})
 
         if [[ -n $PRUNE_REFS ]]; then
           echo "The following branches are stale:"
@@ -96,7 +114,7 @@ runs:
             for instance in ['dev', 'prod']:
                 branch_url = ('https://api.github.com/repos/{}/{}{}/'
                               'branches?page=1&per_page=100').format(
-                    ${{ inputs.context.flux_repo_owner }}, ${{ inputs.context.flux_repo_base }}, instance)
+                    ${FLUX_REPO_OWNER}, ${FLUX_REPO_BASE}, instance)
                 branch_re = re.compile('^release/{}/{}(-[a-z]+)?/([a-f0-9]+)$'.format(
                     instance, release_name))
 

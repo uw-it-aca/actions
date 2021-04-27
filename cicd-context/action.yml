@@ -26,29 +26,20 @@ runs:
       run: |
         echo "::group::Context"
 
-        JSON_CONTEXT="{"
+        export JSON_CONTEXT="{"
+
+        function set_context {
+          echo "$1 = $2"
+          if [[ -n $JSON_CONTEXT ]]; then COMMA="," ; else COMMA="" ; fi
+          JSON_CONTEXT="${JSON_CONTEXT}${COMMA}\"${1}\": \"${2}\""
+        }
 
         export FULL_COMMIT_HASH="${{ github.sha }}"
-        export COMMIT_HASH="${FULL_COMMIT_HASH:0:${{ inputs.commit_hash_length }}}"
-        JSON_CONTEXT="${JSON_CONTEXT}\"commit_hash\": \"${COMMIT_HASH}\""
-        # echo "::set-output name=commit_hash::${COMMIT_HASH}"
-        echo "commit_hash = ${COMMIT_HASH}"
-
-        export IMAGE_TAG="${{ inputs.release_name }}:$COMMIT_HASH"
-        JSON_CONTEXT="${JSON_CONTEXT},\"image_tag\": \"${IMAGE_TAG}\""
-        # echo "::set-output name=image_tag::${IMAGE_TAG}"
-        echo "image_tag = ${IMAGE_TAG}"
-
-        export GITHUB_REF="${{ github.ref }}"
-        GIT_REPO_BRANCH=${GITHUB_REF#refs/heads/}
-        JSON_CONTEXT="${JSON_CONTEXT},\"git_repo_branch\": \"${GIT_REPO_BRANCH}\""
-        # echo "::set-output name=git_repo_branch::${GIT_REPO_BRANCH}"
-        echo "git_repo_branch = ${GIT_REPO_BRANCH}"
+        set_context commit_hash "${FULL_COMMIT_HASH:0:${{ inputs.commit_hash_length }}}"
+        set_context image_tag   "${{ inputs.release_name }}:$COMMIT_HASH"
+        set_context github_ref  "${{ github.ref }}"
 
         JSON_CONTEXT="${JSON_CONTEXT}}"
 
-        echo "${JSON_CONTEXT}"
-
         echo "::endgroup::"
-
         echo "::set-output name=json_context::${JSON_CONTEXT}"
