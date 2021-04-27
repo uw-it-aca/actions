@@ -30,11 +30,12 @@ runs:
 
         function set_context {
           echo "$1 = $2"
+          export ${1^^}=${2}
           if [[ -n $JSON_CONTEXT ]]; then COMMA="," ; else COMMA="" ; fi
           JSON_CONTEXT="${JSON_CONTEXT}${COMMA}\"${1}\": \"${2}\""
         }
 
-        export FULL_COMMIT_HASH="${{ github.sha }}"
+        set_context full_commit_hash "${{ github.sha }}"
         set_context commit_hash "${FULL_COMMIT_HASH:0:${{ inputs.commit_hash_length }}}"
         set_context image_tag   "${{ inputs.release_name }}:$COMMIT_HASH"
         set_context github_ref  "${{ github.ref }}"
