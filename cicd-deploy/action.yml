@@ -77,7 +77,7 @@ runs:
       run: |
         echo "::group::Context"
 
-        export JSON_CONTEXT="{"
+        export JSON_CONTEXT=""
 
         function set_context {
           echo "$1 = $2"
@@ -136,10 +136,8 @@ runs:
         PULL_REQUEST_MESSAGE="Automated ${FLUX_INSTANCE} deploy of [${{ github.repository }}:${COMMIT_HASH}](/${{ github.repository }}/commit/${COMMIT_HASH})  Generated build [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
         echo "PULL_REQUEST_MESSAGE=$PULL_REQUEST_MESSAGE" >> $GITHUB_ENV
 
-        JSON_CONTEXT="${JSON_CONTEXT}}"
-
         echo "::endgroup::"
-        echo "::set-output name=json_context::${JSON_CONTEXT}"
+        echo "::set-output name=json_context::{${JSON_CONTEXT}}"
 
         echo "#####################################"
         echo "DEPLOY $APP_NAME in ${GCP_PROJECT}"
