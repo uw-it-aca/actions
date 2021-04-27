@@ -3,15 +3,27 @@ name: 'CI/CD Context'
 description: 'Generate CI/CD context values'
 
 inputs:
+# required inputs
   release_name:
     description: 'Release name used for image registry name'
     required: true
+
+# overriddable defaults
   commit_hash_length:
     description: 'Length of application commit hash used as image tag'
     required: false
     default: 7
 
 outputs:
+  commit_hash:
+    description: "Id used to trace commit through containerization and deployment"
+    value: ${{ steps.context.outputs.commit_hash }}
+  image_tag:
+    description: "Docker image tag for deployment"
+    value: ${{ steps.context.outputs.image_tag }}
+  git_repo_branch:
+    description: "Short Github repository branch name"
+    value: ${{ steps.context.outputs.git_repo_branch }}
   json_context:
     description: "Serialized JSON context for this release"
     value: ${{ steps.context.outputs.json_context }}
@@ -30,6 +42,7 @@ runs:
 
         function set_context {
           echo "$1 = $2"
+          echo "::set-output name=${1}::${2}"
           export ${1^^}=${2}
           if [[ -n $JSON_CONTEXT ]]; then COMMA="," ; else COMMA="" ; fi
           JSON_CONTEXT="${JSON_CONTEXT}${COMMA}\"${1}\": \"${2}\""
@@ -39,10 +52,9 @@ runs:
         set_context commit_hash "${FULL_COMMIT_HASH:0:${{ inputs.commit_hash_length }}}"
         set_context image_tag   "${{ inputs.release_name }}:$COMMIT_HASH"
         set_context github_ref  "${{ github.ref }}"
+        set_context git_repo_branch ${GITHUB_REF#refs/heads/}
 
         JSON_CONTEXT=\'{${JSON_CONTEXT}}\'
-
         echo "json_context = $JSON_CONTEXT"
-
         echo "::endgroup::"
         echo "::set-output name=json_context::${JSON_CONTEXT}"
