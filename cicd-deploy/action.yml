@@ -84,10 +84,10 @@ runs:
 
         function set_context {
           export ${1^^}='${2}'
-          echo "${1^^}='${2}'" >> $GITHUB_ENV
-          if [[ -n $JSON_CONTEXT ]]; then COMMA="," ; else COMMA="" ; fi
+          echo "${1^^}=\"${2}\"" >> $GITHUB_ENV
+          if [[ -n $JSON_CONTEXT ]]; then COMMA=", " ; else COMMA="" ; fi
           JSON_CONTEXT="${JSON_CONTEXT}${COMMA}\"${1}\": \"${2}\""
-          echo "$1 = $2"
+          echo "$1 = ${1^^}"
         }
 
         set_context commit_hash ${{ inputs.commit_hash }}
@@ -112,22 +112,21 @@ runs:
               ;;
         esac
 
-        # set up deploy context
-        set_context app_instance             ${APP_INSTANCE}
-        set_context app_name                 ${{ inputs.release_name }}-prod-${APP_INSTANCE}
-        set_context flux_base_name           ${{ inputs.release_name }}${FLUX_RELEASE_SUFFIX}
-        set_context manifest_file_name       ${FLUX_BASE_NAME}.yaml
-        set_context local_manifest           ${PWD}/$MANIFEST_FILE_NAME
-        set_context helm_chart_local_dir     ${PWD}/${{ inputs.helm_chart_name }}
-        set_context flux_repo_base           ${{ inputs.flux_repo_base }}
-        set_context flux_repo_owner          ${{ inputs.flux_repo_owner }}
-        set_context flux_repo_name           ${FLUX_REPO_BASE}${FLUX_INSTANCE}
-        set_context flux_repo_path           ${FLUX_REPO_OWNER}/$FLUX_REPO_NAME
-        set_context flux_release_branch      release/${FLUX_INSTANCE}/${FLUX_BASE_NAME}
-        set_context flux_release_branch_name ${FLUX_RELEASE_BRANCH}/${COMMIT_HASH}
-        set_context flux_release_manifest    releases/${FLUX_INSTANCE}/$MANIFEST_FILE_NAME
-        set_context flux_local_dir           ${PWD}/$FLUX_REPO_NAME
-        set_context flux_pr_output           ${PWD}/pr-${FLUX_INSTANCE}-${{ inputs.release_name }}-${COMMIT_HASH}.json
+        set_context app_instance             "${APP_INSTANCE}"
+        set_context app_name                 "${{ inputs.release_name }}-prod-${APP_INSTANCE}"
+        set_context flux_base_name           "${{ inputs.release_name }}${FLUX_RELEASE_SUFFIX}"
+        set_context manifest_file_name       "${FLUX_BASE_NAME}.yaml"
+        set_context local_manifest           "${PWD}/$MANIFEST_FILE_NAME"
+        set_context helm_chart_local_dir     "${PWD}/${{ inputs.helm_chart_name }}"
+        set_context flux_repo_base           "${{ inputs.flux_repo_base }}"
+        set_context flux_repo_owner          "${{ inputs.flux_repo_owner }}"
+        set_context flux_repo_name           "${FLUX_REPO_BASE}${FLUX_INSTANCE}"
+        set_context flux_repo_path           "${FLUX_REPO_OWNER}/$FLUX_REPO_NAME"
+        set_context flux_release_branch      "release/${FLUX_INSTANCE}/${FLUX_BASE_NAME}"
+        set_context flux_release_branch_name "${FLUX_RELEASE_BRANCH}/${COMMIT_HASH}"
+        set_context flux_release_manifest    "releases/${FLUX_INSTANCE}/$MANIFEST_FILE_NAME"
+        set_context flux_local_dir           "${PWD}/$FLUX_REPO_NAME"
+        set_context flux_pr_output           "${PWD}/pr-${FLUX_INSTANCE}-${{ inputs.release_name }}-${COMMIT_HASH}.json"
         set_context commit_message           "Automated ${FLUX_INSTANCE} deploy of ${{ github.repository }}:${COMMIT_HASH} build ${{ github.run_id }}"
         set_context pull_request_message     "Automated ${FLUX_INSTANCE} deploy of [${{ github.repository }}:${COMMIT_HASH}](/${{ github.repository }}/commit/${COMMIT_HASH})  Generated build [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
 
