@@ -47,6 +47,8 @@ runs:
 
         JSON_CONTEXT="${JSON_CONTEXT}}"
 
+        echo "${JSON_CONTEXT}"
+
         echo "::endgroup::"
 
         echo "::set-output name=json_context::${JSON_CONTEXT}"
