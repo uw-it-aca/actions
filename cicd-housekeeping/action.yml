@@ -79,8 +79,13 @@ runs:
 
     - name: Prune Flux Repository
       shell: bash
-      if: inputs.prune_flux_repository
+      env:
+        prune_flux_repository: ${{ inputs.prune_flux_repository }}
       run: |
+        if [[ $PRUNE_FLUX_REPOSITORY != 'true' ]]; then
+          exit 0
+        fi
+
         cd $FLUX_LOCAL_DIR
 
         if [[ -n "${PRUNE_REFS}" ]]; then
@@ -90,9 +95,14 @@ runs:
         fi
 
     - name: Prune Image Registry
-      if: inputs.prune_image_registry
       shell: bash
+      env:
+        PRUNE_IMAGE_REGISTRY: ${{ inputs.prune_image_registry }}
       run: |
+        if [[ $PRUNE_IMAGE_REGISTRY != 'true' ]]; then
+          exit 0
+        fi
+
         python3 - <<EOF
         import os
         import re
