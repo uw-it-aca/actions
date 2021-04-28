@@ -39,8 +39,8 @@ runs:
         echo "::group::Context"
 
         function set_context {
-          echo "$1 = $2"
           echo "${1^^}=${2}" >> $GITHUB_ENV
+          echo "$1 = ${2}"
         }
 
         # pull in input.context
