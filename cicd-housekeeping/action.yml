@@ -109,7 +109,7 @@ runs:
             for instance in ['dev', 'prod']:
                 branch_url = ('https://api.github.com/repos/{}/{}{}/'
                               'branches?page=1&per_page=100').format(
-                    ${FLUX_REPO_OWNER}, ${FLUX_REPO_BASE}, instance)
+                    "${FLUX_REPO_OWNER}", "${FLUX_REPO_BASE}", instance)
                 branch_re = re.compile('^release/{}/{}(-[a-z]+)?/([a-f0-9]+)$'.format(
                     instance, release_name))
 
