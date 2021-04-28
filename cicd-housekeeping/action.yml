@@ -72,7 +72,7 @@ runs:
         if [[ -n $PRUNE_REFS ]]; then
           echo "Stale ${FLUX_RELEASE_BRANCH} branches have been found:"
           echo "${PRUNE_REFS}"
-          echo "${PRUNE_REFS}" >> $GITHUB_ENV
+          echo "PRUNE_REFS=${PRUNE_REFS}" >> $GITHUB_ENV
         else
           echo "There are currently no stale branches to prune."
         fi
