@@ -52,44 +52,32 @@ runs:
 
         echo "::endgroup::"
 
-    - name: Clone Flux Repository
-      shell: bash
-      run: |
-        echo "::add-mask::${{ inputs.gh_auth_token }}"
-        echo "Prune ${FLUX_REPO_PATH} repository"
-
-        git clone https://${{ inputs.gh_auth_token }}@github.com/${FLUX_REPO_PATH}.git --branch master $FLUX_LOCAL_DIR
-
-    - name: Gather stale branches
-      id: references
-      shell: bash
-      run: |
-        cd $FLUX_LOCAL_DIR
-
-        PRUNE_PRESERVE=$(expr 2 + ${{ inputs.prune_flux_preserve_count }})
-        PRUNE_REFS=$(git for-each-ref --merged master --sort='-creatordate' --format='%(refname:strip=3)' "refs/remotes/origin/${FLUX_RELEASE_BRANCH}/" | tail -n +${PRUNE_PRESERVE})
-
-        if [[ -n $PRUNE_REFS ]]; then
-          echo "Stale ${FLUX_RELEASE_BRANCH} branches have been found:"
-          echo "${PRUNE_REFS}"
-          echo "::set-output name=prune_refs::${PRUNE_REFS}"
-        else
-          echo "There are currently no stale branches to prune."
-        fi
-
     - name: Prune Flux Repository
       shell: bash
       env:
         PRUNE_FLUX_REPOSITORY: ${{ inputs.prune_flux_repository }}
       run: |
-        if [[ $PRUNE_FLUX_REPOSITORY == 'true' \
-             and -n ${{ steps.references.outputs.prune_refs }} ]]; then
-          echo "WOULD git push delete:"
-          echo "${{ steps.references.outputs.prune_refs }}"
-          ## cd $FLUX_LOCAL_DIR
-          ## echo "${{ steps.references.outputs.prune_refs }}" | xargs git push --delete origin
+        echo "::add-mask::${{ inputs.gh_auth_token }}"
+
+        echo "Clone ${FLUX_REPO_PATH} repository"
+        git clone https://${{ inputs.gh_auth_token }}@github.com/${FLUX_REPO_PATH}.git --branch master $FLUX_LOCAL_DIR
+        cd $FLUX_LOCAL_DIR
+
+        echo "Gather stale branches"
+        PRUNE_PRESERVE=$(expr 2 + ${{ inputs.prune_flux_preserve_count }})
+        PRUNE_REFS=$(git for-each-ref --merged master --sort='-creatordate' --format='%(refname:strip=3)' "refs/remotes/origin/${FLUX_RELEASE_BRANCH}/" | tail -n +${PRUNE_PRESERVE})
+
+        if [[ -n $PRUNE_REFS ]]; then
+          echo "Discovered stale ${FLUX_RELEASE_BRANCH} branches:"
+          echo "${PRUNE_REFS}"
+          if [[ $PRUNE_FLUX_REPOSITORY == 'true' ]]; then
+            echo "WOULD git push delete origin"
+            ## echo "${{ steps.references.outputs.prune_refs }}" | xargs git push --delete origin
+          else
+            echo "Skiping flux repo pruning step"
+          fi
         else
-          echo "Skiping flux repo pruning step"
+          echo "There are currently no stale branches to prune."
         fi
 
     - name: Prune Image Registry
