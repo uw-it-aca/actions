@@ -80,7 +80,7 @@ runs:
     - name: Prune Flux Repository
       shell: bash
       env:
-        prune_flux_repository: ${{ inputs.prune_flux_repository }}
+        PRUNE_FLUX_REPOSITORY: ${{ inputs.prune_flux_repository }}
       run: |
         if [[ $PRUNE_FLUX_REPOSITORY != 'true' ]]; then
           exit 0
