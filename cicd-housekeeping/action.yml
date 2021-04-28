@@ -107,9 +107,9 @@ runs:
         def referenced_tags(release_name):
             preserve_tags = []
             for instance in ['dev', 'prod']:
-                branch_url = ('https://api.github.com/repos/{}/{}{}/'
-                              'branches?page=1&per_page=100').format(
-                    "${FLUX_REPO_OWNER}", "${FLUX_REPO_BASE}", instance)
+                branch_url = ("https://api.github.com/repos"
+                              "/${FLUX_REPO_PATH}/branches"
+                              "?page=1&per_page=100")
                 branch_re = re.compile('^release/{}/{}(-[a-z]+)?/([a-f0-9]+)$'.format(
                     instance, release_name))
 
