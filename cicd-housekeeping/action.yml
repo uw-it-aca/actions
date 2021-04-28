@@ -55,10 +55,10 @@ runs:
     - name: Clone Flux Repository
       shell: bash
       run: |
-        echo "::add-mask::${GH_AUTH_TOKEN}"
+        echo "::add-mask::${{ inputs.gh_auth_token }}"
         echo "Prune ${FLUX_REPO_PATH} repository"
 
-        git clone https://${GH_AUTH_TOKEN}@github.com/${FLUX_REPO_PATH}.git --branch master $FLUX_LOCAL_DIR
+        git clone https://${{ inputs.gh_auth_token }}@github.com/${FLUX_REPO_PATH}.git --branch master $FLUX_LOCAL_DIR
 
     - name: Gather stale branches
       id: references
