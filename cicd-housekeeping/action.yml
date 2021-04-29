@@ -15,6 +15,26 @@ inputs:
     required: true
 
 # overridable defaults
+  registry_host:
+    description: 'Name of host containing image registry'
+    default: 'gcr.io'
+    required: false
+  registry_owner:
+    description: 'Owner id associated with registry'
+    default: 'uwit-mci-axdd'
+    required: false
+  registry_user:
+    description: 'Username for registry authentication'
+    default: '_json_key'
+    required: false
+  registry_password:
+    description: 'Password or token associated with username for registry authentication'
+    default: ''
+    required: false
+  prune_grace_hours:
+    description: 'Number of hours images without a flux reference remain in the registry'
+    default: 168
+    required: false
   prune_flux_repository:
     description: 'Actually prune release manifests'
     required: false
@@ -92,124 +112,173 @@ runs:
         python3 - <<EOF
         import os
         import re
+        import time
+        import base64
         import requests
+        from requests.auth import HTTPBasicAuth
 
-        release_name = "${{ inputs.release_name }}"
 
-        docker_jwt_token = None
-        registry_host = "hub.docker.com"
-
-        # environment variables
-        #   GH_TOKEN - Github auth token
-        #   REGISTRY_USER - Docker image registry owner
-        #   REGISTRY_PASSWORD -  Docker image registry password
-
-        def referenced_tags(release_name):
+        def flux_repository_tags(flux_repo_owner, flux_repo_base, flux_instances,
+                                 release_name, auth_token):
             preserve_tags = []
-            for instance in ['dev', 'prod']:
-                branch_url = ("https://api.github.com/repos"
-                              "/${FLUX_REPO_PATH}/branches"
-                              "?page=1&per_page=100")
+            for instance in flux_instances:
+                repo_name = "{}/{}{}".format(flux_repo_owner, flux_repo_base, instance)
+                branch_url = ("https://api.github.com/repos/{}/branches"
+                              "?page=1&per_page=100").format(repo_name)
                 branch_re = re.compile('^release/{}/{}(-[a-z]+)?/([a-f0-9]+)$'.format(
                     instance, release_name))
 
+                print("Collect branches in {} matching {}".format(
+                    repo_name, branch_re))
                 while branch_url:
-                    response = requests.get(branch_url, headers={
-                        "Authorization": "Token {}".format(os.getenv('GH_TOKEN')),
+                    raw = requests.get(branch_url, headers={
+                        "Authorization": "Token {}".format(auth_token),
                         "Content-type": "application/vnd.github.v3+json"})
-                    if response.status_code != requests.codes.ok:
-                        print("failed to get branches ({}): {}".format(
-                            response.status_code, branch_url))
-                        exit(1)
+                    if raw.status_code != requests.codes.ok:
+                        raise Exception("Failed to get branches ({}): {}".format(
+                            raw.status_code, branch_url))
 
-                    for branch in response.json():
+                    for branch in raw.json():
                         m = re.match(branch_re, branch['name'])
                         if m:
                             preserve_tags.append(m.group(2))
 
                     try:
-                        branch_url = response.links['next']['url']
+                        branch_url = raw.links['next']['url']
                     except KeyError:
                         branch_url = None
 
             return preserve_tags
 
 
-        def registry_tags(release_name):
-            registry_tags = []
-            repo_tag_url = ('https://{}/v2/repositories/{}/{}/tags/'
-                            '?page=1&page_size=100').format(
-                                registry_host, os.getenv('REGISTRY_USER'), release_name)
-            while True:
-                raw = requests.get(repo_tag_url)
-                if raw.status_code != requests.codes.ok:
-                    break
+        def gcr_authorization(registry_host, registry_name, registry_token):
+            registry_url = ("https://{}/v2/token?scope=repository"
+                            ":{}:pull,push").format(registry_host, registry_name)
+            headers = {'Content-Type': 'application/json'}
+            raw = requests.get(registry_url, headers=headers,
+                               auth=HTTPBasicAuth(
+                                   "_json_key",
+                                   base64.b64decode(registry_token).decode('ascii')))
 
-                response = raw.json()
-                registry_tags.extend(response['results'])
-                if response['next']:
-                    repo_tag_url = response['next']
-                else:
-                    break
+            if raw.status_code != requests.codes.ok:
+                raise Exception("Cannot acquire GCR auth token")
 
-            registry_tags.sort(key=lambda x: x['last_updated'])
-            return registry_tags
+            return "Bearer {}".format(raw.json()['token'])
 
 
-        def docker_jwt_access_token(release_name):
-            global docker_jwt_token
+        def docker_authorization(registry_host, registry_user, registry_password):
+            docker_registry_url = "https://{}/v2/users/login/".format(
+                registry_host)
+            headers = {'Content-Type': 'application/json'}
+            raw = requests.post(docker_registry_url, headers=headers, json={
+                "username": "{}".format(registry_user),
+                "password": "{}".format(registry_password)})
+            if raw.status_code != requests.codes.ok:
+                raise Exception("Cannot acquire Docker auth token")
 
-            if docker_jwt_token is None:
-                docker_registry_url = 'https://{}/v2/users/login/'.format(registry_host)
-                headers = {'Content-Type': 'application/json'}
-                raw = requests.post(docker_registry_url, headers=headers, json={
-                    "username": "{}".format(os.getenv('REGISTRY_USER')),
-                    "password": "{}".format(os.getenv('REGISTRY_PASSWORD'))})
-                if raw.status_code != requests.codes.ok:
-                    raise Exception("Cannot acquire token")
-
-                docker_jwt_token = raw.json()['token']
-
-            return docker_jwt_token
+            return "JWT {}".format(raw.json()['token'])
 
 
-        def delete_image_tag(release_name, tag):
-            delete_url = 'https://{}/v2/repositories/{}/{}/tags/{}/'.format(
-                registry_host, os.getenv('REGISTRY_USER'),
-                release_name, tag['name'])
-            headers = {'Authorization': 'JWT {}'.format(
-                docker_jwt_access_token(release_name))}
-            print("Deleting tag: {}".format(delete_url))
-            response = requests.delete(delete_url, headers=headers)
-            if response.status_code != requests.codes.no_content:
-                raise Exception("failed to delete tag ({}): {}".format(
-                    response.status_code, delete_url))
+        def docker_v2_tags(registry_host, registry_name):
+            return "https://{}/v2/{}/tags/list".format(
+                registry_host, registry_name)
+
+
+        def docker_v2_manifests(registry_host, registry_name, item):
+            return 'https://{}/v2/{}/manifests/{}'.format(
+                registry_host, registry_name, item)
+
+
+        def docker_v2_get(url, auth):
+            print("GET: {}".format(url))
+            headers = {'Accept': 'application/json',
+                       'Authorization': auth}
+            raw = requests.get(url, headers=headers)
+            if raw.status_code == requests.codes.ok:
+                return raw.json()
+
+            print("GET failed ({}): {}".format(raw.status_code, raw.json()))
+
+
+        def docker_v2_delete(url, auth):
+            print("WOULD DELETE: {}".format(url))
+            #headers = {'Authorization': auth}
+            #raw = requests.delete(url, headers=headers)
+            #if raw.status_code != requests.codes.accepted:
+            #    print("DELETE failed ({}): {}".format(
+            #        raw.status_code, raw.json()))
+
+
+        def delete_registry_manifest(registry_host, registry_name, item, auth):
+            manifest_url = docker_v2_manifests(registry_host, registry_name, item)
+            docker_v2_delete(manifest_url, auth)
+
+
+        def get_registry_manifest(registry_host, registry_name, auth):
+            tags_url = docker_v2_tags(registry_host, registry_name)
+            return docker_v2_get(tags_url, auth)['manifest']
 
 
         if __name__ == '__main__':
+            release_name = os.getenv('RELEASE_NAME', 'prt')
+            flux_repo_base = os.getenv('FLUX_REPO_BASE', 'gcp-flux-')
+            flux_repo_owner = os.getenv('FLUX_REPO_OWNER', 'uw-it-aca')
+            github_auth_token = ${{ inputs.gh_auth_token }}
+            registry_host = ${{ inputs.registry_host }}
+            registry_owner = ${{ inputs.registry_owner }}
+            registry_user = ${{ inputs.registry_user }}
+            registry_password = ${{ inputs.registry_password }}
+            prune_grace_hours = ${{ inputs.prune_grace_hours }}
+            flux_instances = ['dev', 'prod']
+            registry_name = "{}/{}".format(registry_owner, release_name)
+
             try:
-                flux_tags = referenced_tags(release_name)
+                print("Gather image tags for {} in {} flux repositories".format(
+                    release_name, flux_instances))
+                flux_tags = flux_repository_tags(
+                    flux_repo_owner, flux_repo_base, flux_instances,
+                    release_name, github_auth_token)
 
-                if len(flux_tags) < 1:
-                    raise Exception("Bailing because finding no referenced tags is weird.")
+                if len(flux_tags) < 2:
+                    raise Exception("Bail: finding no referenced tags is weird.")
 
-                print("Flux referenced tags: {}".format(flux_tags))
+                if registry_host.startswith('gcr'):
+                    authorization = gcr_authorization(
+                        registry_host, registry_name, registry_password)
+                else:
+                    authorization = docker_authorization(
+                        registry_host, registry_user, registry_password)
 
-                registry_tags = registry_tags(release_name)
+                manifests = get_registry_manifest(
+                    registry_host, registry_name, authorization)
+                print("Gathered {} registry image references".format(len(manifests)))
 
-                for tag in registry_tags:
-                    if tag['name'] in flux_tags:
-                        print("Preserving image tagged {}".formats(tag['name']))
-                        flux_tags.remove(tag['name'])
-                    else:
-                        delete_image_tag(release_name, tag)
-                        # just delete one while we're debugging
-                        break
+                now = time.time()
+                for sha, manifest in manifests.items():
+                    # preserve tagged images matching tags found in the flux
+                    # manifest repositories
+                    if any(item in flux_tags for item in manifest['tag']):
+                        print("Preserve flux referenced image tag: {}".format(
+                            manifest['tag']))
+                        continue
 
-                if len(flux_tags) > 0:
-                    print("Flux references with no corresponding image: {}".format(flux_tags))
+                    # preserve tagged images newer than the given threshold
+                    hours = ((now - (float(manifest['timeCreatedMs'])/1000)) / 60 / 60)
+                    if prune_grace_hours > hours and len(manifest['tag']) > 0:
+                        print("Preserving image {} less than {} hours old: {}".format(
+                            manifest['tag'], prune_grace_hours, int(hours)))
+                        continue
+
+                    # tags must be deleted before the image can be deleted
+                    for tag in manifest['tag']:
+                        delete_registry_manifest(
+                            registry_host, registry_name, tag, authorization)
+
+                    delete_registry_manifest(
+                        registry_host, registry_name, sha, authorization)
+                    # raise Exception("Only one deletion per run while DEBUGGING")
+
             except Exception as ex:
-                # pruning issues should never block deployment
                 print("Image pruning problem: {}".format(ex))
 
             raise SystemExit(0)
