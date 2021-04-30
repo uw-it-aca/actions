@@ -268,10 +268,10 @@ runs:
         def docker_v2_delete(url, auth):
             print("DELETE: {}".format(url))
             headers = {'Authorization': auth}
-            #raw = requests.delete(url, headers=headers)
-            #if raw.status_code != requests.codes.accepted:
-            #    print("DELETE failed ({}): {}".format(
-            #        raw.status_code, raw.json()))
+            raw = requests.delete(url, headers=headers)
+            if raw.status_code != requests.codes.accepted:
+                print("DELETE failed ({}): {}".format(
+                    raw.status_code, raw.json()))
 
 
         def delete_registry_manifest(registry_host, registry_name, item, auth):
@@ -342,7 +342,7 @@ runs:
 
                     # preserve tagged images within the given grace period
                     hours = ((now - (float(manifest['timeCreatedMs'])/1000)) / 60 / 60)
-                    if prune_grace_hours > hours and len(manifest['tag']) > 0:
+                    if float(prune_grace_hours) > hours and len(manifest['tag']) > 0:
                         print("Preserving image {} less than {} hours old: {}".format(
                             manifest['tag'], prune_grace_hours, int(hours)))
                         continue
@@ -354,7 +354,7 @@ runs:
 
                     delete_registry_manifest(
                         registry_host, registry_name, sha, authorization)
-                    # raise Exception("Only one deletion per run while DEBUGGING")
+                    raise Exception("Only one deletion per run while DEBUGGING")
 
                 print("::endgroup::")
 
