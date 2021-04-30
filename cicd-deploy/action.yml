@@ -3,8 +3,12 @@ name: 'CI/CD Deploy'
 description: 'Deployment image via flux repository configured to appropriate GCP project'
 
 inputs:
+# required inputs
   release_name:
     description: 'Application name to use for release'
+    required: true
+  gh_auth_token:
+    description: 'Github auth token for Flux deployment repository'
     required: true
   commit_hash:
     description: 'Application repository hash applied to release'
@@ -12,13 +16,20 @@ inputs:
   git_repo_branch:
     description: 'Application repository branch to release'
     required: true
-  gh_auth_token:
-    description: 'Github auth token for Flux deployment repository'
-    required: true
+
+# overridable defaults
   app_instance:
-    description: 'Instance applied '
+    description: 'Instance name applied to deployment, typically '
     required: false
     default: 'test'
+  flux_repo_base:
+    description: 'Flux repository base name'
+    required: false
+    default: gcp-flux-
+  flux_repo_owner:
+    description: 'Flux repository owner'
+    required: false
+    default: uw-it-aca
   helm_chart_branch:
     description: 'Helm chart repository branch at the base of release'
     required: false
@@ -53,24 +64,37 @@ inputs:
     #    CKV_K8S_106 - terminated-pod-gc-threshold set by MCI
     #    CKV_K8S_107 - kubernetes infrastructure profiling controlled by MCI
     default: 'CKV_K8S_21,CKV_K8S_35,CKV_K8S_43,CKV_K8S_106,CKV_K8S_107'
-  prune_flux_repository:
-    description: 'Prune release manifests'
-    required: false
-    default: true
-  prune_flux_preserve_count:
-    description: 'Number of flux repo branches to preserve when pruning'
-    required: false
-    default: 6
+
+outputs:
+  context:
+    description: "Serialized JSON context for this release"
+    value: ${{ steps.context.outputs.json_context }}
 
 runs:
   using: 'composite'
 
   steps:
     - name: Deployment Context and Environment
+      id: context
       shell: bash
       run: |
+        echo "::group::Context"
+
+        export JSON_CONTEXT=""
+
+        function set_context {
+          export ${1^^}="${2}"
+          echo "${1^^}=${2}" >> $GITHUB_ENV
+          if [[ -n $JSON_CONTEXT ]]; then COMMA=", " ; else COMMA="" ; fi
+          JSON_CONTEXT="${JSON_CONTEXT}${COMMA}\"${1}\": \"${2}\""
+          echo "$1 = ${2}"
+        }
+
+        set_context commit_hash ${{ inputs.commit_hash }}
+        set_context git_repo_branch ${{ inputs.git_repo_branch }}
+
         # master/main branch hardwired to prod GCP instance and "prod" app instance
-        case ${{ inputs.git_repo_branch }} in
+        case ${GIT_REPO_BRANCH} in
           main|master)
               APP_INSTANCE="prod"
               FLUX_INSTANCE="prod"
@@ -88,59 +112,37 @@ runs:
               ;;
         esac
 
-        echo APP_INSTANCE="$APP_INSTANCE" >> $GITHUB_ENV
+        set_context app_instance             "${APP_INSTANCE}"
+        set_context app_name                 "${{ inputs.release_name }}-prod-${APP_INSTANCE}"
+        set_context flux_base_name           "${{ inputs.release_name }}${FLUX_RELEASE_SUFFIX}"
+        set_context manifest_file_name       "${FLUX_BASE_NAME}.yaml"
+        set_context local_manifest           "${PWD}/$MANIFEST_FILE_NAME"
+        set_context helm_chart_local_dir     "${PWD}/${{ inputs.helm_chart_name }}"
+        set_context flux_repo_base           "${{ inputs.flux_repo_base }}"
+        set_context flux_repo_owner          "${{ inputs.flux_repo_owner }}"
+        set_context flux_repo_name           "${FLUX_REPO_BASE}${FLUX_INSTANCE}"
+        set_context flux_repo_path           "${FLUX_REPO_OWNER}/$FLUX_REPO_NAME"
+        set_context flux_release_branch      "release/${FLUX_INSTANCE}/${FLUX_BASE_NAME}"
+        set_context flux_release_branch_name "${FLUX_RELEASE_BRANCH}/${COMMIT_HASH}"
+        set_context flux_release_manifest    "releases/${FLUX_INSTANCE}/$MANIFEST_FILE_NAME"
+        set_context flux_local_dir           "${PWD}/$FLUX_REPO_NAME"
+        set_context flux_pr_output           "${PWD}/pr-${FLUX_INSTANCE}-${{ inputs.release_name }}-${COMMIT_HASH}.json"
+        set_context commit_message           "Automated ${FLUX_INSTANCE} deploy of ${{ github.repository }}:${COMMIT_HASH} build ${{ github.run_id }}"
+        set_context pull_request_message     "Automated ${FLUX_INSTANCE} deploy of [${{ github.repository }}:${COMMIT_HASH}](/${{ github.repository }}/commit/${COMMIT_HASH})  Generated build [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
 
-        APP_NAME=${{ inputs.release_name }}-prod-${APP_INSTANCE}
-        echo "APP_NAME=$APP_NAME" >> $GITHUB_ENV
+        JSON_CONTEXT=\'{${JSON_CONTEXT}}\'
+        echo "json_context = $JSON_CONTEXT"
+        echo "::endgroup::"
+        echo "::set-output name=json_context::${JSON_CONTEXT}"
 
         echo "#####################################"
         echo "DEPLOY $APP_NAME in ${GCP_PROJECT}"
         echo "#####################################"
 
-        FLUX_BASE_NAME=${{ inputs.release_name }}${FLUX_RELEASE_SUFFIX}
-
-        MANIFEST_FILE_NAME=${FLUX_BASE_NAME}.yaml
-        echo "MANIFEST_FILE_NAME=$MANIFEST_FILE_NAME" >> $GITHUB_ENV
-
-        LOCAL_MANIFEST=${PWD}/$MANIFEST_FILE_NAME
-        echo "LOCAL_MANIFEST=$LOCAL_MANIFEST" >> $GITHUB_ENV
-
-        # helm chart
-        HELM_CHART_LOCAL_DIR=${PWD}/${{ inputs.helm_chart_name }}
-        echo "HELM_CHART_LOCAL_DIR=$HELM_CHART_LOCAL_DIR" >> $GITHUB_ENV
-
-        # flux repository
-        FLUX_REPO_NAME=gcp-flux-${FLUX_INSTANCE}
-        FLUX_REPO_PATH=uw-it-aca/$FLUX_REPO_NAME
-        echo "FLUX_REPO_PATH=$FLUX_REPO_PATH" >> $GITHUB_ENV
-
-        FLUX_RELEASE_BRANCH=release/${FLUX_INSTANCE}/${FLUX_BASE_NAME}
-        echo "FLUX_RELEASE_BRANCH=$FLUX_RELEASE_BRANCH" >> $GITHUB_ENV
-
-        FLUX_RELEASE_BRANCH_NAME=${FLUX_RELEASE_BRANCH}/${{ inputs.commit_hash }}
-        echo "FLUX_RELEASE_BRANCH_NAME=$FLUX_RELEASE_BRANCH_NAME" >> $GITHUB_ENV
-
-        FLUX_RELEASE_MANIFEST=releases/${FLUX_INSTANCE}/$MANIFEST_FILE_NAME
-        echo "FLUX_RELEASE_MANIFEST=$FLUX_RELEASE_MANIFEST" >> $GITHUB_ENV
-
-        # local paths
-        FLUX_LOCAL_DIR=${PWD}/$FLUX_REPO_NAME
-        echo "FLUX_LOCAL_DIR=$FLUX_LOCAL_DIR" >> $GITHUB_ENV
-
-        FLUX_PR_OUTPUT=${PWD}/pr-${FLUX_INSTANCE}-${{ inputs.release_name }}-${{ inputs.commit_hash }}.json
-        echo "FLUX_PR_OUTPUT=$FLUX_PR_OUTPUT" >> $GITHUB_ENV
-
-
-        # flux commit messages
-        COMMIT_MESSAGE="Automated ${FLUX_INSTANCE} deploy of ${{ github.repository }}:${{ inputs.commit_hash }} build ${{ github.run_id }}"
-        echo "COMMIT_MESSAGE=$COMMIT_MESSAGE" >> $GITHUB_ENV
-        PULL_REQUEST_MESSAGE="Automated ${FLUX_INSTANCE} deploy of [${{ github.repository }}:${{ inputs.commit_hash }}](/${{ github.repository }}/commit/${{ inputs.commit_hash }})  Generated build [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
-        echo "PULL_REQUEST_MESSAGE=$PULL_REQUEST_MESSAGE" >> $GITHUB_ENV
-
     - name: Clone Helm Chart
       shell: bash
       run: >-
-        export HELM_CHART_REPO_PATH="https://github.com/uw-it-aca/${{ inputs.helm_chart_name }}.git" &&
+        export HELM_CHART_REPO_PATH="https://github.com/${FLUX_REPO_OWNER}/${{ inputs.helm_chart_name }}.git" &&
         echo "CLONE chart repository $HELM_CHART_REPO_PATH (${{ inputs.helm_chart_branch }})" &&
         git clone --depth 1 $HELM_CHART_REPO_PATH
         --branch ${{ inputs.helm_chart_branch }}
@@ -150,12 +152,12 @@ runs:
       shell: bash
       run: >-
         export HELM_CHART_VALUES="/app/docker/${APP_INSTANCE}-values.yml" &&
-        echo "GENERATE release manifest $MANIFEST_FILE_NAME using $HELM_CHART_VALUES" &&
+        echo "GENERATE release manifest ${MANIFEST_FILE_NAME} using $HELM_CHART_VALUES" &&
         docker run -v ${PWD}:/app
         -v ${HELM_CHART_LOCAL_DIR}:/chart
         alpine/helm:${{ inputs.helm_app_version }}
         template ${APP_NAME} /chart
-        --set-string "image.tag=${{ inputs.commit_hash }}"
+        --set-string "image.tag=${COMMIT_HASH}"
         -f $HELM_CHART_VALUES > ${LOCAL_MANIFEST}
 
     - name: Validate Manifest
@@ -171,7 +173,7 @@ runs:
       shell: bash
       run: |
         if [[ -n $(grep -e '^\s*securityContext\:.*$' "${LOCAL_MANIFEST}") ]]; then
-          echo "SCAN generated manifest $MANIFEST_FILE_NAME against security policies"
+          echo "SCAN generated manifest ${MANIFEST_FILE_NAME} against security policies"
           CHECKOV_IMAGE="bridgecrew/checkov:${{ inputs.checkov_version }}"
           docker run -t -v ${PWD}/:/app "$CHECKOV_IMAGE" --quiet --skip-check "${{ inputs.checkov_skip_checks }}" -f /app/${MANIFEST_FILE_NAME}
         else
@@ -232,8 +234,6 @@ runs:
         echo "SUBMITTED $FLUX_PULL_URL"
 
     - name: Merge Flux Pull Request
-      env:
-        GIT_REPO_BRANCH: ${{ inputs.git_repo_branch }}
       shell: bash
       run: |
         echo "::add-mask::${{ inputs.gh_auth_token }}"
@@ -253,25 +253,4 @@ runs:
           echo "MERGING ${FLUX_PULL_URL}"
           GITHUB_API_MERGE="$(jq --raw-output '.url' ${FLUX_PR_OUTPUT})/merge"
           curl -H "Authorization: Token ${{ inputs.gh_auth_token }}" -H "Content-type: application/json" -X PUT $GITHUB_API_MERGE -d @- <<<${MERGE_DATA}
-        fi
-
-    - name: Prune Flux Repo
-      env:
-        PRUNE_FLUX_REPOSITORY: ${{ inputs.prune_flux_repository }}
-      shell: bash
-      run: |
-        cd $FLUX_LOCAL_DIR
-        PRUNE_PRESERVE=$(expr 2 + ${{ inputs.prune_flux_preserve_count }})
-        PRUNE_REFS=$(git for-each-ref --merged master --sort='-creatordate' --format='%(refname:strip=3)' "refs/remotes/origin/${FLUX_RELEASE_BRANCH}/" | tail -n +${PRUNE_PRESERVE})
-        if [[ -n $PRUNE_REFS ]]; then
-          if [[ $PRUNE_FLUX_REPOSITORY == 'true' ]] ; then
-            echo "Pruning $(echo "${PRUNE_REFS}" | wc -l) stale manifest branches:"
-            echo "${PRUNE_REFS}"
-            echo "${PRUNE_REFS}" | xargs git push --delete origin
-          else
-            echo "The following branches are stale (${PRUNE_FLUX_REPOSITORY}):"
-            echo "${PRUNE_REFS}"
-          fi
-        else
-          echo "There are currently no stale branches to prune."
         fi

@@ -3,9 +3,12 @@ name: 'CI/CD Context'
 description: 'Generate CI/CD context values'
 
 inputs:
+# required inputs
   release_name:
     description: 'Release name used for image registry name'
     required: true
+
+# overriddable defaults
   commit_hash_length:
     description: 'Length of application commit hash used as image tag'
     required: false
@@ -21,6 +24,9 @@ outputs:
   git_repo_branch:
     description: "Short Github repository branch name"
     value: ${{ steps.context.outputs.git_repo_branch }}
+  json_context:
+    description: "Serialized JSON context for this release"
+    value: ${{ steps.context.outputs.json_context }}
 
 runs:
   using: 'composite'
@@ -32,18 +38,23 @@ runs:
       run: |
         echo "::group::Context"
 
-        export FULL_COMMIT_HASH="${{ github.sha }}"
-        export COMMIT_HASH="${FULL_COMMIT_HASH:0:${{ inputs.commit_hash_length }}}"
-        echo "::set-output name=commit_hash::${COMMIT_HASH}"
-        echo "commit_hash = ${COMMIT_HASH}"
+        export JSON_CONTEXT=""
 
-        export IMAGE_TAG="${{ inputs.release_name }}:$COMMIT_HASH"
-        echo "::set-output name=image_tag::${IMAGE_TAG}"
-        echo "image_tag = ${IMAGE_TAG}"
+        function set_context {
+          echo "$1 = $2"
+          echo "::set-output name=${1}::${2}"
+          export ${1^^}=${2}
+          if [[ -n $JSON_CONTEXT ]]; then COMMA="," ; else COMMA="" ; fi
+          JSON_CONTEXT="${JSON_CONTEXT}${COMMA}\"${1}\": \"${2}\""
+        }
 
-        export GITHUB_REF="${{ github.ref }}"
-        GIT_REPO_BRANCH=${GITHUB_REF#refs/heads/}
-        echo "::set-output name=git_repo_branch::${GIT_REPO_BRANCH}"
-        echo "git_repo_branch = ${GIT_REPO_BRANCH}"
+        set_context full_commit_hash "${{ github.sha }}"
+        set_context commit_hash      "${FULL_COMMIT_HASH:0:${{ inputs.commit_hash_length }}}"
+        set_context image_tag        "${{ inputs.release_name }}:$COMMIT_HASH"
+        set_context github_ref       "${{ github.ref }}"
+        set_context git_repo_branch  "${GITHUB_REF#refs/heads/}"
 
+        JSON_CONTEXT=\'{${JSON_CONTEXT}}\'
+        echo "json_context = $JSON_CONTEXT"
         echo "::endgroup::"
+        echo "::set-output name=json_context::${JSON_CONTEXT}"
