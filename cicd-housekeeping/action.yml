@@ -7,14 +7,15 @@ inputs:
   release_name:
     description: 'Application name to use for release'
     required: true
-  gh_auth_token:
-    description: 'Github auth token for Flux repository'
-    required: true
   context:
     description: 'Configuration and derived values from deployment phase'
     required: true
 
 # overridable defaults
+  gh_auth_token:
+    description: 'Github auth token for Flux repository'
+    default: ''
+    required: false
   registry_host:
     description: 'Name of host containing image registry'
     default: 'gcr.io'
@@ -77,6 +78,11 @@ runs:
       env:
         PRUNE_FLUX_REPOSITORY: ${{ inputs.prune_flux_repository }}
       run: |
+        if [[ $PRUNE_FLUX_REPOSITORY != 'true' ]]; then
+          echo "Skipping flux repository pruning"
+          exit 0
+        fi
+
         echo "::add-mask::${{ inputs.gh_auth_token }}"
 
         echo "Clone ${FLUX_REPO_PATH} repository"
@@ -90,12 +96,8 @@ runs:
         if [[ -n $PRUNE_REFS ]]; then
           echo "Discovered stale ${FLUX_RELEASE_BRANCH} branches:"
           echo "${PRUNE_REFS}"
-          if [[ $PRUNE_FLUX_REPOSITORY == 'true' ]]; then
-            echo "WOULD git push delete origin"
-            ## echo "${{ steps.references.outputs.prune_refs }}" | xargs git push --delete origin
-          else
-            echo "Skiping flux repo pruning step"
-          fi
+          echo "WOULD git push delete origin"
+          ## echo "${{ steps.references.outputs.prune_refs }}" | xargs git push --delete origin
         else
           echo "There are currently no stale branches to prune."
         fi
@@ -106,6 +108,7 @@ runs:
         PRUNE_IMAGE_REGISTRY: ${{ inputs.prune_image_registry }}
       run: |
         if [[ $PRUNE_IMAGE_REGISTRY != 'true' ]]; then
+          echo "Skipping image registry repository pruning"
           exit 0
         fi
 
@@ -115,21 +118,25 @@ runs:
         import time
         import base64
         import requests
+        import yaml
         from requests.auth import HTTPBasicAuth
 
 
-        def flux_repository_tags(flux_repo_owner, flux_repo_base, flux_instances,
-                                 release_name, auth_token):
-            preserve_tags = []
+        def tags_from_flux_branch_names(flux_repo_owner, flux_repo_base,
+                                        flux_instances, release_name, auth_token):
+            """Flux repository image tags from branch naming pattern
+            """
+            branch_tags = ['latest']
             for instance in flux_instances:
                 repo_name = "{}/{}{}".format(flux_repo_owner, flux_repo_base, instance)
                 branch_url = ("https://api.github.com/repos/{}/branches"
                               "?page=1&per_page=100").format(repo_name)
-                branch_re = re.compile('^release/{}/{}(-[a-z]+)?/([a-f0-9]+)$'.format(
-                    instance, release_name))
+                branch_re = re.compile('^release/{}/({})(-[a-z]+)?/(.+)$'.format(
+                        instance, release_name))
 
-                print("Collect branches in {} matching {}".format(
+                print("::group::Tags from branch names in {} matching {}".format(
                     repo_name, branch_re))
+
                 while branch_url:
                     raw = requests.get(branch_url, headers={
                         "Authorization": "Token {}".format(auth_token),
@@ -141,14 +148,72 @@ runs:
                     for branch in raw.json():
                         m = re.match(branch_re, branch['name'])
                         if m:
-                            preserve_tags.append(m.group(2))
+                            branch_tags.append(m.group(3))
+                            print("{} ({}{})".format(
+                                m.group(3), m.group(1),
+                                m.group(2) if m.group(2) else ""))
 
                     try:
                         branch_url = raw.links['next']['url']
                     except KeyError:
                         branch_url = None
 
-            return preserve_tags
+                print("::endgroup::")
+
+            return branch_tags
+
+
+        def manifest_image_tags(block, image_re, tags):
+            """Return all image tags matching given regular expression
+            """
+            block_tags = []
+            if isinstance(block, dict):
+                if 'image' in block:
+                    m = re.match(image_re, block['image'])
+                    if m:
+                        print("{}".format(m.group(1)))
+                        return [m.group(1)] + tags
+                    else:
+                        return tags
+
+                for k, v in block.items():
+                    block_tags += manifest_image_tags(v, image_re, tags)
+            elif isinstance(block, list):
+                for section in block:
+                    block_tags += manifest_image_tags(section, image_re, tags)
+
+            return block_tags + tags
+
+
+        def tags_from_current_flux_release(flux_repo_owner, flux_repo_base,
+                                           flux_instances, release_name,
+                                           registry_image_re, github_auth_token):
+            """Flux repository image tags for the current releases
+            """
+            release_tags = []
+            for instance in flux_instances:
+                repo_name = "{}/{}{}".format(flux_repo_owner, flux_repo_base, instance)
+                yaml_url = ("https://raw.githubusercontent.com/{}/master/releases"
+                            "/{}/{}.yaml").format(repo_name, instance, release_name)
+
+                print("::group::Current {} release tags in {}".format(
+                    instance, yaml_url))
+                raw = requests.get(yaml_url, headers={
+                    "Authorization": "Token {}".format(github_auth_token)})
+                if raw.status_code != requests.codes.ok:
+                    raise Exception("Failed to get yaml ({}): {}".format(
+                        raw.status_code, yaml_url))
+
+                try:
+                    for manifest in yaml.load_all(raw.text):
+                        release_tags += manifest_image_tags(
+                            manifest, registry_image_re, [])
+                except yaml.YAMLError as ex:
+                    print("ERROR in yaml parse: {}".format(ex))
+
+                print("::endgroup::")
+
+            return list(set(release_tags))
 
 
         def gcr_authorization(registry_host, registry_name, registry_token):
@@ -201,8 +266,8 @@ runs:
 
 
         def docker_v2_delete(url, auth):
-            print("WOULD DELETE: {}".format(url))
-            #headers = {'Authorization': auth}
+            print("DELETE: {}".format(url))
+            headers = {'Authorization': auth}
             #raw = requests.delete(url, headers=headers)
             #if raw.status_code != requests.codes.accepted:
             #    print("DELETE failed ({}): {}".format(
@@ -231,14 +296,25 @@ runs:
             prune_grace_hours = "${{ inputs.prune_grace_hours }}"
             flux_instances = ['dev', 'prod']
             registry_name = "{}/{}".format(registry_owner, release_name)
+            registry_image_re = re.compile("^{}/{}/{}\:(.*)$".format(
+                registry_host, registry_owner, release_name))
 
             try:
-                print("Gather image tags for {} in {} flux repositories".format(
-                    release_name, flux_instances))
-                flux_tags = flux_repository_tags(
+                flux_branch_tags = tags_from_flux_branch_names(
                     flux_repo_owner, flux_repo_base, flux_instances,
                     release_name, github_auth_token)
 
+                flux_release_tags = tags_from_current_flux_release(
+                    flux_repo_owner, flux_repo_base, flux_instances,
+                    release_name, registry_image_re, github_auth_token)
+
+                flux_tags = set(flux_branch_tags + flux_release_tags)
+
+                print("::group::Preserved image tags")
+                print(*flux_tags, sep="\n")
+                print("::endgroup::")
+
+                # 2 assumes minimum of distinct dev and prod release
                 if len(flux_tags) < 2:
                     raise Exception("Bail: finding no referenced tags is weird.")
 
@@ -251,7 +327,9 @@ runs:
 
                 manifests = get_registry_manifest(
                     registry_host, registry_name, authorization)
-                print("Gathered {} registry image references".format(len(manifests)))
+
+                print("::group::Process {} registry image manifests".format(
+                    len(manifests)))
 
                 now = time.time()
                 for sha, manifest in manifests.items():
@@ -262,9 +340,9 @@ runs:
                             manifest['tag']))
                         continue
 
-                    # preserve tagged images newer than the given threshold
+                    # preserve tagged images within the given grace period
                     hours = ((now - (float(manifest['timeCreatedMs'])/1000)) / 60 / 60)
-                    if float(prune_grace_hours) > hours and len(manifest['tag']) > 0:
+                    if prune_grace_hours > hours and len(manifest['tag']) > 0:
                         print("Preserving image {} less than {} hours old: {}".format(
                             manifest['tag'], prune_grace_hours, int(hours)))
                         continue
@@ -277,6 +355,8 @@ runs:
                     delete_registry_manifest(
                         registry_host, registry_name, sha, authorization)
                     # raise Exception("Only one deletion per run while DEBUGGING")
+
+                print("::endgroup::")
 
             except Exception as ex:
                 print("Image pruning problem: {}".format(ex))
