@@ -223,12 +223,12 @@ runs:
             release_name = os.getenv('RELEASE_NAME', 'prt')
             flux_repo_base = os.getenv('FLUX_REPO_BASE', 'gcp-flux-')
             flux_repo_owner = os.getenv('FLUX_REPO_OWNER', 'uw-it-aca')
-            github_auth_token = ${{ inputs.gh_auth_token }}
-            registry_host = ${{ inputs.registry_host }}
-            registry_owner = ${{ inputs.registry_owner }}
-            registry_user = ${{ inputs.registry_user }}
-            registry_password = ${{ inputs.registry_password }}
-            prune_grace_hours = ${{ inputs.prune_grace_hours }}
+            github_auth_token = "${{ inputs.gh_auth_token }}"
+            registry_host = "${{ inputs.registry_host }}"
+            registry_owner = "${{ inputs.registry_owner }}"
+            registry_user = "${{ inputs.registry_user }}"
+            registry_password = "${{ inputs.registry_password }}"
+            prune_grace_hours = "${{ inputs.prune_grace_hours }}"
             flux_instances = ['dev', 'prod']
             registry_name = "{}/{}".format(registry_owner, release_name)
 
