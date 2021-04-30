@@ -96,7 +96,7 @@ runs:
         if [[ -n $PRUNE_REFS ]]; then
           echo "::group::Deleting stale ${FLUX_RELEASE_BRANCH} branches:"
           echo "${PRUNE_REFS}"
-          echo "${{ steps.references.outputs.prune_refs }}" | xargs git push --delete origin
+          echo "${PRUNE_REFS}" | xargs git push --delete origin
           echo "::endgroup::"
         else
           echo "There are currently no stale branches to prune."
