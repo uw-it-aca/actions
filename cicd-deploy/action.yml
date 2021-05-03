@@ -72,6 +72,10 @@ inputs:
     #    CKV_K8S_106 - terminated-pod-gc-threshold set by MCI
     #    CKV_K8S_107 - kubernetes infrastructure profiling controlled by MCI
     default: 'CKV_K8S_21,CKV_K8S_35,CKV_K8S_43,CKV_K8S_106,CKV_K8S_107'
+  context_filename:
+    description: 'Generated build context json file'
+    required: false
+    default: deploy-context-${{ github.run_id }}.json
 
 outputs:
   context:
@@ -142,6 +146,8 @@ runs:
         echo "json_context = $JSON_CONTEXT"
         echo "::endgroup::"
         echo "::set-output name=json_context::${JSON_CONTEXT}"
+
+        echo "${JSON_CONTEXT}" > ${{ inputs.context_filename }}
 
         echo "#####################################"
         echo "DEPLOY $APP_NAME in ${GCP_PROJECT}"
