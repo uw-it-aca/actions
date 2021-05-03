@@ -19,9 +19,17 @@ inputs:
 
 # overridable defaults
   app_instance:
-    description: 'Instance name applied to deployment, typically '
+    description: 'Instance name applied to deployment, typically "test"'
     required: false
     default: 'test'
+  gcp_production_project:
+    description: 'GCP project intended for production deployment'
+    required: false
+    default: 'uwit-mci-0011'
+  gcp_development_project:
+    description: 'GCP project intended for development deployments'
+    required: false
+    default: 'uwit-mci-0010'
   flux_repo_base:
     description: 'Flux repository base name'
     required: false
@@ -98,13 +106,13 @@ runs:
           main|master)
               APP_INSTANCE="prod"
               FLUX_INSTANCE="prod"
-              GCP_PROJECT="uwit-mci-0011"
+              GCP_PROJECT="${{ inputs.gcp_production_project }}"
               FLUX_RELEASE_SUFFIX=""
               ;;
           *)
               APP_INSTANCE="${{ inputs.app_instance }}"
               FLUX_INSTANCE="dev"
-              GCP_PROJECT="uwit-mci-0010"
+              GCP_PROJECT="${{ inputs.gcp_development_project }}"
               FLUX_RELEASE_SUFFIX=""
               if [ $APP_INSTANCE != "test" ]; then
                 FLUX_RELEASE_SUFFIX="-${APP_INSTANCE}"
