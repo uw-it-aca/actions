@@ -289,8 +289,8 @@ runs:
 
         if __name__ == '__main__':
             release_name      = "${{ inputs.release_name }}"
-            flux_repo_base    = "os.getenv('FLUX_REPO_BASE')"
-            flux_repo_owner   = "os.getenv('FLUX_REPO_OWNER')"
+            flux_repo_base    = "{}".format(os.getenv('FLUX_REPO_BASE'))
+            flux_repo_owner   = "{}".format(os.getenv('FLUX_REPO_OWNER'))
             github_auth_token = "${{ inputs.gh_auth_token }}"
             registry_host     = "${{ inputs.registry_host }}"
             registry_owner    = "${{ inputs.registry_owner }}"
