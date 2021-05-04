@@ -53,6 +53,7 @@ jobs:
       commit_hash: ${{ steps.context.outputs.commit_hash }}
       git_repo_branch: ${{ steps.context.outputs.git_repo_branch }}
       image_tag: ${{ steps.context.outputs.image_tag }}
+      deploy-context-filename: deploy-context-${{ github.run_id }}.json
 
     steps:
       - name: Set up Context
@@ -157,7 +158,7 @@ jobs:
           release_name: ${{ env.RELEASE_NAME }}
           commit_hash: ${{ needs.context.outputs.commit_hash }}
           git_repo_branch: ${{ needs.context.outputs.git_repo_branch }}
-          context_filename: deploy-context-${{ github.run_id }}.json
+          context_filename: ${{ needs.context.outputs.deploy-context-filename }}
           gh_auth_token: ${{ secrets.GH_AUTH_TOKEN }}
 
       - name: Deploy Evaluation Branch
@@ -168,14 +169,14 @@ jobs:
           commit_hash: ${{ needs.context.outputs.commit_hash }}
           git_repo_branch: ${{ needs.context.outputs.git_repo_branch }}
           gh_auth_token: ${{ secrets.GH_AUTH_TOKEN }}
-          context_filename: deploy-context-${{ github.run_id }}.json
+          context_filename: ${{ needs.context.outputs.deploy-context-filename }}
           app_instance: eval
 
       - name: 'Provide subsequent jobs build context via json file'
         uses: actions/upload-artifact@v2
         with:
           name: deploy-context
-          path: deploy-context-${{ github.run_id }}.json
+          path: ${{ needs.context.outputs.deploy-context-filename }}
           retention-days: 1
 
   housekeeping:
@@ -186,12 +187,15 @@ jobs:
     runs-on: ubuntu-18.04
 
     steps:
-      - name: 'Download Context from build job'
+      - name: Download context from build job
         id: context
         uses: actions/download-artifact@v2
         with:
           name: deploy-context
-        run: echo "::set-output name=context::$(< deploy-context-${{ github.run_id }}.json)"
+
+      - name: Set downloaded context as output
+        id: context
+        run: echo "::set-output name=context::$(< ${{ needs.context.outputs.deploy-context-filename }})"
 
       - name: House Keeping
         uses: uw-it-aca/actions/cicd-housekeeping@feature/registry-pruning

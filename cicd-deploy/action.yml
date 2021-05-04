@@ -75,7 +75,7 @@ inputs:
   context_filename:
     description: 'Generated build context json file'
     required: false
-    default: deploy-context-${{ github.run_id }}.json
+    default: '/tmp/deploy-context-${{ github.run_id }}.json'
 
 outputs:
   context:
