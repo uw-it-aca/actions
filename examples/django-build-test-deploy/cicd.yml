@@ -53,7 +53,6 @@ jobs:
       commit_hash: ${{ steps.context.outputs.commit_hash }}
       git_repo_branch: ${{ steps.context.outputs.git_repo_branch }}
       image_tag: ${{ steps.context.outputs.image_tag }}
-      deploy-context-filename: deploy-context-${{ github.run_id }}.json
 
     steps:
       - name: Set up Context
@@ -143,6 +142,9 @@ jobs:
 
     needs: [context, build]
 
+    outputs:
+      context: ${{ steps.context.outputs.context }}
+
     runs-on: ubuntu-18.04
 
     steps:
@@ -172,12 +174,10 @@ jobs:
           context_filename: ${{ needs.context.outputs.deploy-context-filename }}
           app_instance: eval
 
-      - name: 'Provide subsequent jobs build context via json file'
-        uses: actions/upload-artifact@v2
-        with:
-          name: deploy-context
-          path: ${{ needs.context.outputs.deploy-context-filename }}
-          retention-days: 1
+      - name: 'Surface context from executed build step'
+        id: context
+        shell: bash
+        run: echo "::set-output name=context::$(< ${CONTEXT_FILENAME})"
 
   housekeeping:
     if: github.event_name == 'push'
@@ -187,20 +187,10 @@ jobs:
     runs-on: ubuntu-18.04
 
     steps:
-      - name: Download context from build job
-        id: context
-        uses: actions/download-artifact@v2
-        with:
-          name: deploy-context
-
-      - name: Set downloaded context as output
-        id: context
-        run: echo "::set-output name=context::$(< ${{ needs.context.outputs.deploy-context-filename }})"
-
       - name: House Keeping
         uses: uw-it-aca/actions/cicd-housekeeping@feature/registry-pruning
         with:
           release_name: ${{ env.RELEASE_NAME }}
           gh_auth_token: ${{ secrets.GH_AUTH_TOKEN }}
           registry_password: ${{ secrets.GCP_JSON_KEY }}
-          context: ${{ steps.context.outputs.context }}
+          context: ${{ needs.deploy.outputs.context }}
