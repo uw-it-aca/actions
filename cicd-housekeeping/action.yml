@@ -114,7 +114,10 @@ runs:
         if [[ $PRUNE_IMAGE_REGISTRY != 'true' ]]; then
           echo "Skipping image registry repository pruning"
           exit 0
+
         fi
+
+        pip3 install PyGithub
 
         python3 - <<EOF
         import os
@@ -124,99 +127,50 @@ runs:
         import requests
         import yaml
         from requests.auth import HTTPBasicAuth
+        from github import Github
 
 
-        def tags_from_flux_branch_names(flux_repo_owner, flux_repo_base,
-                                        flux_instances, release_name, auth_token):
-            """Flux repository image tags from branch naming pattern
+        def manifest_values(block, key, values):
+            """Return, from the given yaml block, all values of the given key
             """
-            branch_tags = ['latest']
-            for instance in flux_instances:
-                repo_name = "{}/{}{}".format(flux_repo_owner, flux_repo_base, instance)
-                branch_url = ("https://api.github.com/repos/{}/branches"
-                              "?page=1&per_page=100").format(repo_name)
-                branch_re = re.compile('^release/{}/({})(-[a-z]+)?/(.+)$'.format(
-                        instance, release_name))
-
-                print("::group::Tags from branch names in {} matching {}".format(
-                    repo_name, branch_re))
-
-                while branch_url:
-                    raw = requests.get(branch_url, headers={
-                        "Authorization": "Token {}".format(auth_token),
-                        "Content-type": "application/vnd.github.v3+json"})
-                    if raw.status_code != requests.codes.ok:
-                        raise Exception("Failed to get branches ({}): {}".format(
-                            raw.status_code, branch_url))
-
-                    for branch in raw.json():
-                        m = re.match(branch_re, branch['name'])
-                        if m:
-                            branch_tags.append(m.group(3))
-                            print("{} ({}{})".format(
-                                m.group(3), m.group(1),
-                                m.group(2) if m.group(2) else ""))
-                    try:
-                        branch_url = raw.links['next']['url']
-                    except KeyError:
-                        branch_url = None
-
-                print("::endgroup::")
-
-            return branch_tags
-
-
-        def manifest_image_tags(block, image_re, tags):
-            """Return all image tags matching given regular expression
-            """
-            block_tags = []
+            block_values = []
             if isinstance(block, dict):
-                if 'image' in block:
-                    m = re.match(image_re, block['image'])
-                    if m:
-                        print("{}".format(m.group(1)))
-                        return [m.group(1)] + tags
-
-                    return tags
+                if key in block:
+                    return [block[key]] + values
 
                 for k, v in block.items():
-                    block_tags += manifest_image_tags(v, image_re, tags)
+                    block_values += manifest_values(v, key, values)
             elif isinstance(block, list):
                 for section in block:
-                    block_tags += manifest_image_tags(section, image_re, tags)
+                    block_values += manifest_values(section, key, values)
 
-            return block_tags + tags
+            return block_values + values
 
 
-        def tags_from_current_flux_release(flux_repo_owner, flux_repo_base,
-                                           flux_instances, release_name,
-                                           registry_image_re, github_auth_token):
-            """Flux repository image tags for the current releases
-            """
-            release_tags = []
-            for instance in flux_instances:
-                repo_name = "{}/{}{}".format(flux_repo_owner, flux_repo_base, instance)
-                yaml_url = ("https://raw.githubusercontent.com/{}/master/releases"
-                            "/{}/{}.yaml").format(repo_name, instance, release_name)
+        def manifest_image_tags(manifest_dir, release_name, image_re, branch, repo):
+            manifest_path = "{}/{}".format(manifest_dir, release_name)
 
-                print("::group::Current {} release tags in {}".format(
-                    instance, yaml_url))
-                raw = requests.get(yaml_url, headers={
-                    "Authorization": "Token {}".format(github_auth_token)})
-                if raw.status_code != requests.codes.ok:
-                    raise Exception("Failed to get yaml ({}): {}".format(
-                        raw.status_code, yaml_url))
+            images = set()
+            print("Images in branch {}".format(branch))
+            for content in repo.get_contents(manifest_dir, ref=branch):
+                if re.match("^{}(-[^/]*)*".format(manifest_path), content.path):
+                    manifest = base64.b64decode(content.content).decode('ascii')
+                    block_images = set()
+                    raw_block_images = set()
+                    for block in yaml.load_all(manifest, Loader=yaml.FullLoader):
+                        for image in manifest_values(block, 'image', []):
+                            if release_name in image:
+                                raw_block_images.add(image)
 
-                try:
-                    for manifest in yaml.load_all(raw.text):
-                        release_tags += manifest_image_tags(
-                            manifest, registry_image_re, [])
-                except yaml.YAMLError as ex:
-                    print("ERROR in yaml parse: {}".format(ex))
+                            m = re.match(image_re, image)
+                            if m:
+                                block_images.add(m.group(1))
 
-                print("::endgroup::")
+                    images.update(block_images)
+                    print("  Manifest {}: {}".format(
+                        content.path, ', '.join(raw_block_images)))
 
-            return list(set(release_tags))
+            return images
 
 
         def gcr_authorization(registry_host, registry_name, registry_token):
@@ -303,18 +257,31 @@ runs:
             registry_image_re = re.compile("^{}/{}/{}\:(.*)$".format(
                 registry_host, registry_owner, release_name))
 
+
             try:
-                flux_branch_tags = tags_from_flux_branch_names(
-                    flux_repo_owner, flux_repo_base, flux_instances,
-                    release_name, github_auth_token)
+                github = Github(github_auth_token)
 
-                flux_release_tags = tags_from_current_flux_release(
-                    flux_repo_owner, flux_repo_base, flux_instances,
-                    release_name, registry_image_re, github_auth_token)
+                # gather image tags from branches related to release_name
+                flux_tags = {'latest'}
+                for instance in flux_instances:
+                    manifest_dir = "releases/{}".format(instance)
 
-                flux_tags = set(flux_branch_tags + flux_release_tags)
+                    repo_name = "{}/{}{}".format(flux_repo_owner, flux_repo_base, instance)
+                    branch_base = "release/{}/{}".format(instance, release_name)
+                    repo = github.get_repo(repo_name)
 
-                print("::group::Preserved image tags")
+                    print("::group::Gather tags in {} from branches {}*".format(
+                        repo_name, branch_base))
+
+                    for branch in [branch.name for branch in repo.get_branches() if (
+                            branch.name.startswith(branch_base))]:
+                        flux_tags.update(
+                            manifest_image_tags(
+                                manifest_dir, release_name, registry_image_re, branch, repo))
+
+                    print("::endgroup::")
+
+                print("::group::Preserving tags:")
                 print(*flux_tags, sep="\n")
                 print("::endgroup::")
 
