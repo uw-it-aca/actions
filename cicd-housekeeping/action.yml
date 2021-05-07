@@ -117,6 +117,7 @@ runs:
 
         fi
 
+        sudo apt install python3-setuptools
         python3 -m pip install setuptools PyGithub
 
         python3 - <<EOF
