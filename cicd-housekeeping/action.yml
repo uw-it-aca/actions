@@ -117,7 +117,7 @@ runs:
 
         fi
 
-        python3 -m pip install PyGithub
+        sudo pip3 install PyGithub
 
         python3 - <<EOF
         import os
