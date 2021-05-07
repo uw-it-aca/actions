@@ -117,9 +117,10 @@ runs:
 
         fi
 
-        sudo pip3 install PyGithub
+        sudo apt-get install -y python-setuptools
+        python3.6 -m pip install PyGithub
 
-        python3 - <<EOF
+        python3.6 - <<EOF
         import os
         import re
         import time
