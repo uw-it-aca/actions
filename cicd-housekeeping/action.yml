@@ -328,6 +328,7 @@ runs:
                             manifest['tag'], prune_grace_hours, int(hours)))
                         continue
 
+                    print("Delete manifests for tags: {}".format(manifest['tag']))
                     # tags must be deleted before the image can be deleted
                     for tag in manifest['tag']:
                         delete_registry_manifest(
