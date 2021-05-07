@@ -117,7 +117,7 @@ runs:
 
         fi
 
-        sudo pip3 install setuptools PyGithub
+        pip3 install setuptools PyGithub
 
         python3.6 - <<EOF
         import os
