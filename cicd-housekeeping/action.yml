@@ -63,6 +63,11 @@ runs:
       run: |
         echo "::group::Context"
 
+        if [ -z "${{ inputs.context }}" ]; then
+          echo "Empty context input"
+          exit 1
+        fi
+
         function set_context {
           echo "${1^^}=${2}" >> $GITHUB_ENV
           echo "$1 = ${2}"
@@ -299,8 +304,10 @@ runs:
                     authorization = docker_authorization(
                         registry_host, registry_user, registry_password)
 
+                print("::group::Fetch image data from {}".format(registry_name))
                 manifests = get_registry_manifest(
                     registry_host, registry_name, authorization)
+                print("::endgroup::")
 
                 print("::group::Process {} registry image manifests".format(
                     len(manifests)))
