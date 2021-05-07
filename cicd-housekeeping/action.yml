@@ -118,7 +118,7 @@ runs:
         fi
 
         sudo apt install python3-setuptools
-        python3 -m pip install setuptools PyGithub
+        python3 -m pip install setuptools wheel pyyaml pygithub
 
         python3 - <<EOF
         import os
