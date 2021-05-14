@@ -283,7 +283,7 @@ runs:
 
                     for branch in [branch.name for branch in repo.get_branches() if (
                             branch.name.startswith(branch_base) or branch.name in [
-                            'main, 'master'])]:
+                            'main', 'master'])]:
                         flux_tags.update(
                             manifest_image_tags(
                                 manifest_dir, release_name, registry_image_re, branch, repo))
