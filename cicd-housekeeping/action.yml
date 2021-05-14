@@ -269,7 +269,7 @@ runs:
             try:
                 github = Github(github_auth_token)
 
-                # gather image tags from branches related to release_name
+                # gather image tags from flux repo branches related to release_name
                 flux_tags = {'latest'}
                 for instance in flux_instances:
                     manifest_dir = "releases/{}".format(instance)
@@ -282,7 +282,8 @@ runs:
                         repo_name, branch_base))
 
                     for branch in [branch.name for branch in repo.get_branches() if (
-                            branch.name.startswith(branch_base))]:
+                            branch.name.startswith(branch_base) or branch.name in [
+                            'main, 'master'])]:
                         flux_tags.update(
                             manifest_image_tags(
                                 manifest_dir, release_name, registry_image_re, branch, repo))
