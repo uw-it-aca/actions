@@ -98,7 +98,7 @@ runs:
       id: context
       shell: bash
       run: |
-        echo "::group::Setup deployment context (save to ${{ inputs.context_filename }})"
+        echo "::group::Setup deployment context"
 
         export JSON_CONTEXT=""
 
@@ -155,8 +155,10 @@ runs:
         echo "::endgroup::"
         echo "::set-output name=json_context::${JSON_CONTEXT}"
 
+        echo "::group::Save context"
         set_context context_filename ${{ inputs.context_filename }}
         echo "${JSON_CONTEXT}" > ${{ inputs.context_filename }}
+        echo "::endgroup::"
 
         echo "#####################################"
         echo "DEPLOY $APP_NAME in ${GCP_PROJECT}"
