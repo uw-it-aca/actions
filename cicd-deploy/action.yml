@@ -50,10 +50,18 @@ inputs:
     description: 'Helm application version used to produce release manifest'
     required: false
     default: '3.4.2'
+  kubernetes_version:
+    description: 'Kubernetes version kubeval should validate against'
+    required: false
+    default: 'master'
   kubeval_version:
     description: 'Kubeval version used to lint kubernetes manifest'
     required: false
     default: 'latest'
+  kubeval_schema_url:
+    description: 'Kubeval --schema-location argument'
+    required: false
+    default: 'https://raw.githubusercontent.com/yannh/kubernetes-json-schema/master/'
   kubeval_skip_kinds:
     description: 'List of manifest objects for Kubeval to ignore'
     required: false
@@ -179,10 +187,8 @@ runs:
       shell: bash
       run: >-
         echo "VALIDATE generated manifest ${MANIFEST_FILE_NAME}" &&
-        docker run -t -v ${PWD}:/app
-        garethr/kubeval:${{ inputs.kubeval_version }}
-        /app/${MANIFEST_FILE_NAME}
-        --strict --skip-kinds "${{ inputs.kubeval_skip_kinds }}"
+        wget -O - https://github.com/instrumenta/kubeval/releases/${{ inputs.kubeval_version }}/download/kubeval-linux-amd64.tar.gz | tar xzf - > ./kubeval
+        ./kubeval ${PWD}/${MANIFEST_FILE_NAME} --schema-location "{{$kubeval_schema_url}}/{{$kubernetes_version}}/" --strict --skip-kinds "${{ inputs.kubeval_skip_kinds }}"
 
     - name: Security Policy Scan
       shell: bash
