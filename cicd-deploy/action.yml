@@ -50,10 +50,18 @@ inputs:
     description: 'Helm application version used to produce release manifest'
     required: false
     default: '3.4.2'
+  kubernetes_version:
+    description: 'Kubernetes schema version for kubeval to validate'
+    required: false
+    default: 'master'
   kubeval_version:
     description: 'Kubeval version used to lint kubernetes manifest'
     required: false
     default: 'latest'
+  kubeval_schema_location:
+    description: 'Kubeval --schema-location argument'
+    required: false
+    default: 'https://raw.githubusercontent.com/yannh/kubernetes-json-schema'
   kubeval_skip_kinds:
     description: 'List of manifest objects for Kubeval to ignore'
     required: false
@@ -90,7 +98,7 @@ runs:
       id: context
       shell: bash
       run: |
-        echo "::group::Context"
+        echo "::group::Setup deployment context"
 
         export JSON_CONTEXT=""
 
@@ -147,8 +155,10 @@ runs:
         echo "::endgroup::"
         echo "::set-output name=json_context::${JSON_CONTEXT}"
 
+        echo "::group::Save context"
         set_context context_filename ${{ inputs.context_filename }}
         echo "${JSON_CONTEXT}" > ${{ inputs.context_filename }}
+        echo "::endgroup::"
 
         echo "#####################################"
         echo "DEPLOY $APP_NAME in ${GCP_PROJECT}"
@@ -156,41 +166,54 @@ runs:
 
     - name: Clone Helm Chart
       shell: bash
-      run: >-
-        export HELM_CHART_REPO_PATH="https://github.com/${FLUX_REPO_OWNER}/${{ inputs.helm_chart_name }}.git" &&
-        echo "CLONE chart repository $HELM_CHART_REPO_PATH (${{ inputs.helm_chart_branch }})" &&
-        git clone --depth 1 $HELM_CHART_REPO_PATH
-        --branch ${{ inputs.helm_chart_branch }}
-        ${HELM_CHART_LOCAL_DIR}
+      run: |
+        export HELM_CHART_REPO_PATH="https://github.com/${FLUX_REPO_OWNER}/${{ inputs.helm_chart_name }}.git"
+        echo "::group::CLONE chart repository $HELM_CHART_REPO_PATH (${{ inputs.helm_chart_branch }})"
+
+        git clone --depth 1 $HELM_CHART_REPO_PATH --branch ${{ inputs.helm_chart_branch }} ${HELM_CHART_LOCAL_DIR}
+
+        echo "::endgroup::"
 
     - name: Generate App Manifest
       shell: bash
-      run: >-
-        export HELM_CHART_VALUES="/app/docker/${APP_INSTANCE}-values.yml" &&
-        echo "GENERATE release manifest ${MANIFEST_FILE_NAME} using $HELM_CHART_VALUES" &&
-        docker run -v ${PWD}:/app
-        -v ${HELM_CHART_LOCAL_DIR}:/chart
-        alpine/helm:${{ inputs.helm_app_version }}
-        template ${APP_NAME} /chart
-        --set-string "image.tag=${COMMIT_HASH}"
-        -f $HELM_CHART_VALUES > ${LOCAL_MANIFEST}
+      run: |
+        export HELM_CHART_VALUES_FILE="docker/${APP_INSTANCE}-values.yml"
+        export HELM_CHART_VALUES="/app/${HELM_CHART_VALUES_FILE}"
+        echo "::group::GENERATE release manifest ${MANIFEST_FILE_NAME} using $HELM_CHART_VALUES_FILE"
+
+        docker run -v ${PWD}:/app -v ${HELM_CHART_LOCAL_DIR}:/chart alpine/helm:${{ inputs.helm_app_version }} template ${APP_NAME} /chart --set-string "image.tag=${COMMIT_HASH}" -f $HELM_CHART_VALUES > ${LOCAL_MANIFEST}
+
+        echo "::endgroup::"
 
     - name: Validate Manifest
       shell: bash
-      run: >-
-        echo "VALIDATE generated manifest ${MANIFEST_FILE_NAME}" &&
-        docker run -t -v ${PWD}:/app
-        garethr/kubeval:${{ inputs.kubeval_version }}
-        /app/${MANIFEST_FILE_NAME}
-        --strict --skip-kinds "${{ inputs.kubeval_skip_kinds }}"
+      run: |
+        export KUBEVAL_DIR=kubeval-dist
+        echo "::group::FETCH kubeval to validate manifest"
+
+        (
+            mkdir -p $KUBEVAL_DIR
+            cd $KUBEVAL_DIR
+            wget https://github.com/instrumenta/kubeval/releases/${{ inputs.kubeval_version }}/download/kubeval-linux-amd64.tar.gz
+            tar xzf kubeval-linux-amd64.tar.gz
+        )
+
+        echo "::endgroup::"
+        echo "::group::VALIDATE generated manifest ${MANIFEST_FILE_NAME}"
+
+        ./${KUBEVAL_DIR}/kubeval ${PWD}/${MANIFEST_FILE_NAME} --schema-location "${{ inputs.kubeval_schema_location }}/${{ inputs.kubernetes_version }}" --strict --skip-kinds "${{ inputs.kubeval_skip_kinds }}"
+        echo "::endgroup::"
 
     - name: Security Policy Scan
       shell: bash
       run: |
         if [[ -n $(grep -e '^\s*securityContext\:.*$' "${LOCAL_MANIFEST}") ]]; then
-          echo "SCAN generated manifest ${MANIFEST_FILE_NAME} against security policies"
+          echo "::group::SCAN manifest ${MANIFEST_FILE_NAME} security policies (checkov ${{ inputs.checkov_version }})"
+
           CHECKOV_IMAGE="bridgecrew/checkov:${{ inputs.checkov_version }}"
           docker run -t -v ${PWD}/:/app "$CHECKOV_IMAGE" --quiet --skip-check "${{ inputs.checkov_skip_checks }}" -f /app/${MANIFEST_FILE_NAME}
+
+          echo "::endgroup::"
         else
           echo "Security Policy Scan Skipped: no context found"
         fi
@@ -199,14 +222,16 @@ runs:
       shell: bash
       run: |
         echo "::add-mask::${{ inputs.gh_auth_token }}"
-        echo "CLONE flux repository ${FLUX_REPO_PATH}"
+        echo "::group::CLONE flux repository ${FLUX_REPO_PATH}"
 
         git clone https://${{ inputs.gh_auth_token }}@github.com/${FLUX_REPO_PATH}.git --branch master ${FLUX_LOCAL_DIR}
+
+        echo "::endgroup::"
 
     - name: Create Flux Release Branch
       shell: bash
       run: |
-        echo "CREATE branch $FLUX_RELEASE_BRANCH_NAME, add $FLUX_RELEASE_MANIFEST"
+        echo "::group::CREATE branch $FLUX_RELEASE_BRANCH_NAME, add $FLUX_RELEASE_MANIFEST"
 
         cd $FLUX_LOCAL_DIR
         git checkout -b ${FLUX_RELEASE_BRANCH_NAME}
@@ -214,11 +239,13 @@ runs:
         git add ${FLUX_RELEASE_MANIFEST}
         git status
 
+        echo "::endgroup::"
+
     - name: Commit Flux Release
       shell: bash
       run: |
         echo "::add-mask::${{ inputs.gh_auth_token }}"
-        echo "COMMIT flux release $FLUX_RELEASE_BRANCH_NAME"
+        echo "::group::COMMIT flux release $FLUX_RELEASE_BRANCH_NAME"
 
         cd $FLUX_LOCAL_DIR
         git config user.email "aca-it@uw.edu"
@@ -227,11 +254,14 @@ runs:
         git push origin ${FLUX_RELEASE_BRANCH_NAME}
         git status
 
+        echo "::endgroup::"
+
     - name: Submit Flux Pull Release
       shell: bash
       run: |
         echo "::add-mask::${{ inputs.gh_auth_token }}"
-        echo "SUBMIT $FLUX_RELEASE_BRANCH_NAME pull request"
+        echo "::group::SUBMIT $FLUX_RELEASE_BRANCH_NAME pull request"
+
         GITHUB_REPO_PULLS="https://api.github.com/repos/${FLUX_REPO_PATH}/pulls"
         PR_DATA=$(cat <<EOF
         {
@@ -247,6 +277,8 @@ runs:
         FLUX_PULL_URL=$(jq '.html_url' ${FLUX_PR_OUTPUT})
         echo "FLUX_PULL_URL=$FLUX_PULL_URL" >> $GITHUB_ENV
         echo "SUBMITTED $FLUX_PULL_URL"
+
+        echo "::endgroup::"
 
     - name: Merge Flux Pull Request
       shell: bash
@@ -265,7 +297,10 @@ runs:
         if [[ $GIT_REPO_BRANCH =~ ^(main|master)$ ]]; then
           echo "Visit $FLUX_PULL_URL to merge manifest branch"
         else
-          echo "MERGING ${FLUX_PULL_URL}"
+          echo "::group::MERGING ${FLUX_PULL_URL}"
+
           GITHUB_API_MERGE="$(jq --raw-output '.url' ${FLUX_PR_OUTPUT})/merge"
           curl -H "Authorization: Token ${{ inputs.gh_auth_token }}" -H "Content-type: application/json" -X PUT $GITHUB_API_MERGE -d @- <<<${MERGE_DATA}
+
+          echo "::endgroup::"
         fi
