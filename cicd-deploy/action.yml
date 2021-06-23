@@ -191,11 +191,11 @@ runs:
         (
             mkdir -p kubeval-dist
             cd kubeval-dist
-            wget https://github.com/instrumenta/kubeval/releases/${{ kubeval_version }}/download/kubeval-linux-amd64.tar.gz
+            wget https://github.com/instrumenta/kubeval/releases/${{ inputs.kubeval_version }}/download/kubeval-linux-amd64.tar.gz
             tar xzf kubeval-linux-amd64.tar.gz
         )
 
-        ./kubeval-dist/kubeval ${PWD}/${MANIFEST_FILE_NAME} --schema-location "${{ kubeval_schema_location }}/${{ kubernetes_version }}/" --strict --skip-kinds "${{ inputs.kubeval_skip_kinds }}"
+        ./kubeval-dist/kubeval ${PWD}/${MANIFEST_FILE_NAME} --schema-location "${{ inputs.kubeval_schema_location }}/${{ inputs.kubernetes_version }}/" --strict --skip-kinds "${{ inputs.kubeval_skip_kinds }}"
 
     - name: Security Policy Scan
       shell: bash
