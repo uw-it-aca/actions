@@ -61,7 +61,7 @@ inputs:
   kubeval_schema_location:
     description: 'Kubeval --schema-location argument'
     required: false
-    default: 'https://raw.githubusercontent.com/yannh/kubernetes-json-schema/master/'
+    default: 'https://raw.githubusercontent.com/yannh/kubernetes-json-schema'
   kubeval_skip_kinds:
     description: 'List of manifest objects for Kubeval to ignore'
     required: false
@@ -195,7 +195,7 @@ runs:
             tar xzf kubeval-linux-amd64.tar.gz
         )
 
-        ./kubeval-dist/kubeval ${PWD}/${MANIFEST_FILE_NAME} --schema-location "${{ inputs.kubeval_schema_location }}/${{ inputs.kubernetes_version }}/" --strict --skip-kinds "${{ inputs.kubeval_skip_kinds }}"
+        ./kubeval-dist/kubeval ${PWD}/${MANIFEST_FILE_NAME} --schema-location "${{ inputs.kubeval_schema_location }}/${{ inputs.kubernetes_version }}" --strict --skip-kinds "${{ inputs.kubeval_skip_kinds }}"
 
     - name: Security Policy Scan
       shell: bash
