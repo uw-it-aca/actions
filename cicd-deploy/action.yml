@@ -98,7 +98,7 @@ runs:
       id: context
       shell: bash
       run: |
-        echo "::group::Context"
+        echo "::group::Setup deployment context (save to ${{ inputs.context_filename }})"
 
         export JSON_CONTEXT=""
 
@@ -175,8 +175,9 @@ runs:
     - name: Generate App Manifest
       shell: bash
       run: |
-        export HELM_CHART_VALUES="/app/docker/${APP_INSTANCE}-values.yml"
-        echo "::group::GENERATE release manifest ${MANIFEST_FILE_NAME} using $HELM_CHART_VALUES"
+        export HELM_CHART_VALUES_FILE="docker/${APP_INSTANCE}-values.yml"
+        export HELM_CHART_VALUES="/app/${HELM_CHART_VALUES_FILE}"
+        echo "::group::GENERATE release manifest ${MANIFEST_FILE_NAME} using $HELM_CHART_VALUES_FILE"
 
         docker run -v ${PWD}:/app -v ${HELM_CHART_LOCAL_DIR}:/chart alpine/helm:${{ inputs.helm_app_version }} template ${APP_NAME} /chart --set-string "image.tag=${COMMIT_HASH}" -f $HELM_CHART_VALUES > ${LOCAL_MANIFEST}
 
@@ -205,7 +206,7 @@ runs:
       shell: bash
       run: |
         if [[ -n $(grep -e '^\s*securityContext\:.*$' "${LOCAL_MANIFEST}") ]]; then
-          echo "::group::SCAN generated manifest ${MANIFEST_FILE_NAME} against security policies"
+          echo "::group::SCAN manifest ${MANIFEST_FILE_NAME} security policies (checkov ${{ inputs.checkov_version }})"
 
           CHECKOV_IMAGE="bridgecrew/checkov:${{ inputs.checkov_version }}"
           docker run -t -v ${PWD}/:/app "$CHECKOV_IMAGE" --quiet --skip-check "${{ inputs.checkov_skip_checks }}" -f /app/${MANIFEST_FILE_NAME}
