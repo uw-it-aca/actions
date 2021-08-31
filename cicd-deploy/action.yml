@@ -188,6 +188,17 @@ runs:
     - name: Validate Manifest
       shell: bash
       run: |
+        echo "::group::Python setup"
+        sudo apt install python3-setuptools
+        python3 -m pip install setuptools wheel yq
+        echo "::endgroup::"
+
+        echo "::group::K8S validation"
+        if cat ${PWD}/${MANIFEST_FILE_NAME} | yq .metadata.name | grep '_'; then
+            (echo "^^^ should replace underscores with dashes" && exit 1)
+        fi
+        echo "::endgroup::"
+
         export KUBEVAL_DIR=kubeval-dist
         echo "::group::FETCH kubeval to validate manifest"
 
