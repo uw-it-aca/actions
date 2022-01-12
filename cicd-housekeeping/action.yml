@@ -124,7 +124,9 @@ runs:
 
         echo "::group::Python setup"
         sudo apt install python3-setuptools
-        python3 -m pip install setuptools wheel pyyaml pygithub
+        python3 -m pip install setuptools wheel
+        python3 setup.py bdist_wheel
+        python3 -m pip install pyyaml pygithub
         echo "::endgroup::"
 
         python3 - <<EOF
