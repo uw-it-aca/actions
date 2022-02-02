@@ -125,7 +125,7 @@ runs:
         echo "::group::Python setup"
         sudo apt install python3-setuptools
         python3 -m pip install --upgrade pip==20.2.4
-        python3 -m pip install setuptools wheel pyyaml pygithub
+        python3 -m pip install setuptools wheel pyyaml>=5.1 pygithub
         echo "::endgroup::"
 
         python3 - <<EOF
