@@ -26,6 +26,10 @@ inputs:
     description: 'GCP project intended for production deployment'
     required: false
     default: 'uwit-mci-0011'
+  gcp_production_flux_instance:
+    description: 'GCP flux deployment instance (e.g., "prod", "dev")'
+    required: false
+    default: 'prod'
   gcp_development_project:
     description: 'GCP project intended for development deployments'
     required: false
@@ -117,7 +121,7 @@ runs:
         case ${GIT_REPO_BRANCH} in
           main|master)
               APP_INSTANCE="prod"
-              FLUX_INSTANCE="prod"
+              FLUX_INSTANCE="${{ inputs.gcp_production_flux_instance }}"
               GCP_PROJECT="${{ inputs.gcp_production_project }}"
               FLUX_RELEASE_SUFFIX=""
               ;;
