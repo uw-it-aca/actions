@@ -309,7 +309,7 @@ runs:
         EOF
         )
 
-        if [[ $GIT_REPO_BRANCH =~ ^(main|master)$ ]]; then
+        if [[ $APP_INSTANCE = "prod" ]]; then
           echo "Visit $FLUX_PULL_URL to merge manifest branch"
         else
           echo "::group::MERGING ${FLUX_PULL_URL}"
