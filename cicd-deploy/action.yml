@@ -42,6 +42,10 @@ inputs:
     description: 'Flux repository owner'
     required: false
     default: uw-it-aca
+  flux_repo_default_branch:
+    description: 'Flux default branch name (e.g., "master", "main")'
+    required: false
+    default: master
   helm_chart_branch:
     description: 'Helm chart repository branch at the base of release'
     required: false
@@ -144,6 +148,7 @@ runs:
         set_context helm_chart_local_dir     "${PWD}/${{ inputs.helm_chart_name }}"
         set_context flux_repo_base           "${{ inputs.flux_repo_base }}"
         set_context flux_repo_owner          "${{ inputs.flux_repo_owner }}"
+        set_context flux_repo_default_branch "${{ inputs.flux_repo_default_branch }}"
         set_context flux_repo_name           "${FLUX_REPO_BASE}${FLUX_INSTANCE}"
         set_context flux_repo_path           "${FLUX_REPO_OWNER}/$FLUX_REPO_NAME"
         set_context flux_release_branch      "release/${FLUX_INSTANCE}/${FLUX_BASE_NAME}"
@@ -239,7 +244,7 @@ runs:
         echo "::add-mask::${{ inputs.gh_auth_token }}"
         echo "::group::CLONE flux repository ${FLUX_REPO_PATH}"
 
-        git clone https://${{ inputs.gh_auth_token }}@github.com/${FLUX_REPO_PATH}.git --branch master ${FLUX_LOCAL_DIR}
+        git clone https://${{ inputs.gh_auth_token }}@github.com/${FLUX_REPO_PATH}.git --branch ${FLUX_REPO_DEFAULT_BRANCH} ${FLUX_LOCAL_DIR}
 
         echo "::endgroup::"
 
@@ -283,7 +288,7 @@ runs:
           "title": "${COMMIT_MESSAGE}",
           "body": "${PULL_REQUEST_MESSAGE}",
           "head": "${FLUX_RELEASE_BRANCH_NAME}",
-          "base": "master"
+          "base": "${FLUX_REPO_DEFAULT_BRANCH}"
         }
         EOF
         )
