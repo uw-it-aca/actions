@@ -17,7 +17,7 @@ inputs:
     description: 'GCR hostname'
     required: false
     default: 'gcr.io'
-  container_path
+  container_path:
     description: 'Registry container path'
     required: false
     default: ''
