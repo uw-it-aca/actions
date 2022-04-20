@@ -1,0 +1,59 @@
+name: 'Google Cloud Registry Push'
+
+description: 'Tag and push image to GAR'
+
+inputs:
+  image_tag:
+    description: 'Image tag to push to GAR'
+    required: true
+  gcp_json_key:
+    description: 'Authentication key for GCP access'
+    required: true
+  gcp_project_id:
+    description: 'GCP project containing registry'
+    required: false
+    default: 'uwit-mci-axdd'
+  registry_hostname:
+    description: 'GAR hostname'
+    required: false
+    default: 'us-docker.pkg.dev'
+
+outputs:
+  gar_tag:
+    description: 'GAR image tag'
+    value: ${{ steps.gar-tag.outputs.gar_tag }}
+
+runs:
+  using: 'composite'
+
+  steps:
+    - name: Verify GCP credentials
+      shell: bash
+      run: |
+        if [[ -z "${{ inputs.gcp_json_key }}" ]]; then
+          echo "Missing GCP credentials"
+          exit 1
+        fi
+
+    - name: Login to GAR
+      id: gar-login
+      uses: docker/login-action@v1
+      with:
+        registry: ${{ inputs.gar_hostname }}
+        username: _json_key
+        password: ${{ inputs.gcp_json_key }}
+
+    - name: Tag Image for GAR
+      id: gar-tag
+      shell: bash
+      run: |
+        GAR_TAG=${{ inputs.gar_hostname }}/${{ inputs.gcp_project_id }}/containers/${{ inputs.image_tag }}
+        docker tag "${{ inputs.image_tag }}" "$GAR_TAG"
+        echo "::set-output name=gar_tag::$GAR_TAG"
+
+    - name: Push Image to GAR
+      id: gar-push
+      shell: bash
+      run: |
+        docker push "${{ steps.gar-tag.outputs.gar_tag }}"
+        echo "pushed ${{ steps.gar-tag.outputs.gar_tag }}"
