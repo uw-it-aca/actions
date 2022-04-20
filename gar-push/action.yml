@@ -35,7 +35,7 @@ runs:
           exit 1
         fi
 
-    - name: Login to GAR
+    - name: Docker Login
       id: gar-login
       uses: docker/login-action@v1
       with:
@@ -43,7 +43,7 @@ runs:
         username: _json_key
         password: ${{ inputs.gcp_json_key }}
 
-    - name: Tag Image for GAR
+    - name: Tag Image
       id: gar-tag
       shell: bash
       run: |
