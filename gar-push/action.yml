@@ -28,11 +28,15 @@ runs:
 
   steps:
     - name: Verify GCP credentials
+      id: gar-auth
       shell: bash
       run: |
         if [[ -z "${{ inputs.gcp_json_key }}" ]]; then
           echo "Missing GCP credentials"
           exit 1
+        else
+          GCP_RAW_JSON_KEY=$(echo "${{ inputs.gcp_json_key }}" | base64 -d)
+          echo "::set-output name=gcp_raw_json_key::$GCP_RAW_JSON_KEY"
         fi
 
     - name: Docker Login
@@ -41,7 +45,7 @@ runs:
       with:
         registry: ${{ inputs.gar_hostname }}
         username: _json_key
-        password: ${{ inputs.gcp_json_key }}
+        password: ${{ steps.gar-auth.outputs.ggcp_raw_json_key }}
 
     - name: Tag Image
       id: gar-tag
