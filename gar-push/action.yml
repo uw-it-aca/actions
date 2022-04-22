@@ -13,7 +13,7 @@ inputs:
     description: 'GCP project containing registry'
     required: false
     default: 'uwit-mci-axdd'
-  registry_hostname:
+  gar_hostname:
     description: 'GAR hostname'
     required: false
     default: 'us-docker.pkg.dev'
@@ -42,7 +42,7 @@ runs:
       run: |
         echo "${{ inputs.gcp_json_key }}" |
           base64 -d |
-          docker login --username=_json_key --password-stdin https://${{ inputs.gcr_hostname }}
+          docker login --username=_json_key --password-stdin https://${{ inputs.gar_hostname }}
 
     - name: Tag Image
       id: gar-tag
