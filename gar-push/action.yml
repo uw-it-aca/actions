@@ -41,7 +41,8 @@ runs:
       shell: bash
       run: |
         echo "${{ inputs.gcp_json_key }}" |
-          docker login --username=_json_key_base64 --password-stdin https://${{ inputs.gar_hostname }}
+          base64 -d |
+          docker login --username=_json_key --password-stdin https://${{ inputs.gar_hostname }}
 
     - name: Tag Image
       id: gar-tag
