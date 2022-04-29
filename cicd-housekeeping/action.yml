@@ -182,7 +182,7 @@ runs:
             return images
 
 
-        def gcr_authorization(registry_host, registry_name, registry_token):
+        def gcp_docker_authorization(registry_host, registry_name, registry_token):
             registry_url = ("https://{}/v2/token?scope=repository"
                             ":{}:pull,push").format(registry_host, registry_name)
             headers = {'Content-Type': 'application/json'}
@@ -192,10 +192,9 @@ runs:
                                    base64.b64decode(registry_token).decode('ascii')))
 
             if raw.status_code != requests.codes.ok:
-                raise Exception("Cannot acquire GCR auth token")
+                raise Exception("Cannot acquire GCP docker auth token")
 
             return "Bearer {}".format(raw.json()['token'])
-
 
         def docker_authorization(registry_host, registry_user, registry_password):
             docker_registry_url = "https://{}/v2/users/login/".format(
@@ -262,10 +261,13 @@ runs:
             prune_grace_hours = "${{ inputs.prune_grace_hours }}"
             flux_instances    = "${{ inputs.flux_instances }}".split(',')
 
-            registry_name = "{}/{}".format(registry_owner, release_name)
-            registry_image_re = re.compile("^{}/{}/{}\:(.*)$".format(
-                registry_host, registry_owner, release_name))
+            if registry_host.endswith('docker.pkg.dev'):
+                registry_name = "{}/containers/{}".format(registry_owner, release_name)
+            else:
+                registry_name = "{}/{}".format(registry_owner, release_name)
 
+            registry_image_re = re.compile("^{}/{}\:(.*)$".format(
+                registry_host, registry_name))
 
             try:
                 github = Github(github_auth_token)
@@ -299,8 +301,8 @@ runs:
                 if len(flux_tags) < len(flux_instances):
                     raise Exception("Bail: finding no referenced tags is weird.")
 
-                if registry_host.startswith('gcr'):
-                    authorization = gcr_authorization(
+                if (registry_host.endswith('docker.pkg.dev') or registry_host.startswith('gcr')):
+                    authorization = gcp_docker_authorization(
                         registry_host, registry_name, registry_password)
                 else:
                     authorization = docker_authorization(
