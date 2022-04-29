@@ -1,10 +1,10 @@
 name: 'Google Cloud Registry Push'
 
-description: 'Tag and push image to GCR'
+description: 'Tag and push image to Registry'
 
 inputs:
   image_tag:
-    description: 'Image tag to push to GCR'
+    description: 'Image tag to push to Registry'
     required: true
   gcp_json_key:
     description: 'Authentication key for GCP access'
@@ -13,15 +13,15 @@ inputs:
     description: 'GCP project containing registry'
     required: false
     default: 'uwit-mci-axdd'
-  gcr_hostname:
-    description: 'GCR hostname'
+  reg_hostname:
+    description: 'Registry hostname'
     required: false
     default: 'gcr.io'
 
 outputs:
-  gcr_tag:
-    description: 'GCR image tag'
-    value: ${{ steps.gcr-tag.outputs.gcr_tag }}
+  reg_tag:
+    description: 'Registry image tag'
+    value: ${{ steps.reg-tag.outputs.reg_tag }}
 
 runs:
   using: 'composite'
@@ -41,19 +41,29 @@ runs:
       run: |
         echo "${{ inputs.gcp_json_key }}" |
           base64 -d |
-          docker login --username=_json_key --password-stdin https://${{ inputs.gcr_hostname }}
+          docker login --username=_json_key --password-stdin https://${{ inputs.reg_hostname }}
 
-    - name: Tag Image for GCR
-      id: gcr-tag
+    - name: Tag Image for Registry
+      id: reg-tag
       shell: bash
       run: |
-        GCR_TAG=${{ inputs.gcr_hostname }}/${{ inputs.gcp_project_id }}/${{ inputs.image_tag }}
-        docker tag "${{ inputs.image_tag }}" "$GCR_TAG"
-        echo "::set-output name=gcr_tag::$GCR_TAG"
+        case ${{ inputs.reg_hostname }} in
+          *docker.pkg.dev$)
+            REG_PATH=containers/
+            ;;
+          *)
+            REG_PATH=""
+            ;;
+        esac
 
-    - name: Push Image to GCR
-      id: gcr-push
+        REG_REG_NAME=${{ inputs.gcp_project_id }}/${REG_PATH}${{ inputs.image_tag }}
+        REG_TAG=${{ inputs.reg_hostname }}/${REG_REG_NAME}
+        docker tag "${{ inputs.image_tag }}" "$REG_TAG"
+        echo "::set-output name=reg_tag::$REG_TAG"
+
+    - name: Push Image to Registry
+      id: reg-push
       shell: bash
       run: |
-        docker push "${{ steps.gcr-tag.outputs.gcr_tag }}"
-        echo "pushed ${{ steps.gcr-tag.outputs.gcr_tag }}"
+        docker push "${{ steps.reg-tag.outputs.reg_tag }}"
+        echo "pushed ${{ steps.reg-tag.outputs.reg_tag }}"
