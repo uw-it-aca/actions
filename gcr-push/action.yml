@@ -13,7 +13,7 @@ inputs:
     description: 'GCP project containing registry'
     required: false
     default: 'uwit-mci-axdd'
-  reg_hostname:
+  registry_hostname:
     description: 'Registry hostname'
     required: false
     default: 'gcr.io'
@@ -41,13 +41,13 @@ runs:
       run: |
         echo "${{ inputs.gcp_json_key }}" |
           base64 -d |
-          docker login --username=_json_key --password-stdin https://${{ inputs.reg_hostname }}
+          docker login --username=_json_key --password-stdin https://${{ inputs.registry_hostname }}
 
     - name: Tag Image for Registry
       id: reg-tag
       shell: bash
       run: |
-        case ${{ inputs.reg_hostname }} in
+        case ${{ inputs.registry_hostname }} in
           *docker.pkg.dev$)
             REG_PATH=containers/
             ;;
@@ -56,8 +56,7 @@ runs:
             ;;
         esac
 
-        REG_REG_NAME=${{ inputs.gcp_project_id }}/${REG_PATH}${{ inputs.image_tag }}
-        REG_TAG=${{ inputs.reg_hostname }}/${REG_REG_NAME}
+        REG_TAG=${{ inputs.registry_hostname }}/${{ inputs.gcp_project_id }}/${REG_PATH}${{ inputs.image_tag }}
         docker tag "${{ inputs.image_tag }}" "$REG_TAG"
         echo "::set-output name=reg_tag::$REG_TAG"
 
