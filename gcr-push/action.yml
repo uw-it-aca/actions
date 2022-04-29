@@ -48,7 +48,7 @@ runs:
       shell: bash
       run: |
         case ${{ inputs.registry_hostname }} in
-          *docker.pkg.dev$)
+         *docker.pkg.dev)
             REG_PATH=containers/
             ;;
           *)
