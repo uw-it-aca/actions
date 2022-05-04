@@ -1,4 +1,4 @@
-name: 'Google Cloud Registry Push'
+name: 'Google Cloud Registry or Artifact Registry Push'
 
 description: 'Tag and push image to Registry'
 
@@ -17,11 +17,24 @@ inputs:
     description: 'Registry hostname'
     required: false
     default: 'gcr.io'
+  registry_path:
+    description: 'Registry path'
+    required: false
+    default: ''
 
 outputs:
-  reg_tag:
-    description: 'Registry image tag'
-    value: ${{ steps.reg-tag.outputs.reg_tag }}
+  image_registry_host:
+    description: 'Image registry host'
+    value: ${{ steps.reg-tag.outputs.image_registry_host }}
+  image_registry_path:
+    description: 'Image registry path'
+    value: ${{ steps.reg-tag.outputs.image_registry_path }}
+  image_registry:
+    description: 'Docker image registry'
+    value: ${{ steps.reg-tag.outputs.image_registry }}
+  image_registry_tagged:
+    description: 'Docker image registry name, tagged'
+    value: ${{ steps.reg-tag.outputs.image_registry_tagged }}
 
 runs:
   using: 'composite'
@@ -47,22 +60,25 @@ runs:
       id: reg-tag
       shell: bash
       run: |
-        case ${{ inputs.registry_hostname }} in
-         *docker.pkg.dev)
-            REG_PATH=containers/
-            ;;
-          *)
-            REG_PATH=""
-            ;;
-        esac
+        IMAGE_RELEASE_NAME=$(echo ${{ inputs.image_tag }} | cut -d: -f 1)
+        IMAGE_RELEASE_TAG=$(echo ${{ inputs.image_tag }} | cut -d: -f 2)
+        IMAGE_REG_PATH_PARTS=(${{ inputs.gcp_project_id }}
+                              ${{ inputs.registry_path }}
+                              ${IMAGE_RELEASE_NAME})
+        IMAGE_REG_PATH=$(IFS=/; echo "${IMAGE_REG_PATH_PARTS[*]}")
+        IMAGE_REG=${{ inputs.registry_hostname }}/${IMAGE_REG_PATH}
+        IMAGE_REG_TAG=${IMAGE_REG}:${IMAGE_RELEASE_TAG}
 
-        REG_TAG=${{ inputs.registry_hostname }}/${{ inputs.gcp_project_id }}/${REG_PATH}${{ inputs.image_tag }}
-        docker tag "${{ inputs.image_tag }}" "$REG_TAG"
-        echo "::set-output name=reg_tag::$REG_TAG"
+        docker tag "${{ inputs.image_tag }}" "$IMAGE_REG_TAG"
+
+        echo "::set-output name=image_registry_host::${{ inputs.registry_hostname }}"
+        echo "::set-output name=image_registry_path::$IMAGE_REG_PATH"
+        echo "::set-output name=image_registry::$IMAGE_REG"
+        echo "::set-output name=image_registry_tagged::$IMAGE_REG_TAG"
 
     - name: Push Image to Registry
       id: reg-push
       shell: bash
       run: |
-        docker push "${{ steps.reg-tag.outputs.reg_tag }}"
-        echo "pushed ${{ steps.reg-tag.outputs.reg_tag }}"
+        docker push "${{ steps.reg-tag.outputs.image_registry_tagged }}"
+        echo "pushed ${{ steps.reg-tag.outputs.image_registry_tagged }}"
