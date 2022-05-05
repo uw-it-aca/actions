@@ -20,7 +20,7 @@ inputs:
     description: 'Flux manifest repository suffixes matching those defined in cicd-deploy'
     default: 'prod,dev'
     required: false
-  registry_host:
+  registry_hostname:
     description: 'Name of host containing image registry'
     default: 'gcr.io'
     required: false
@@ -263,7 +263,7 @@ runs:
             flux_repo_base    = "{}".format(os.getenv('FLUX_REPO_BASE'))
             flux_repo_owner   = "{}".format(os.getenv('FLUX_REPO_OWNER'))
             github_auth_token = "${{ inputs.gh_auth_token }}"
-            registry_host     = "${{ inputs.registry_host }}"
+            registry_hostname = "${{ inputs.registry_hostname }}"
             registry_name     = "${{ inputs.registry_name }}"
             registry_owner    = "${{ inputs.registry_owner }}"
             registry_path     = "${{ inputs.registry_path }}"
@@ -277,7 +277,7 @@ runs:
                     None, [registry_owner, registry_path, release_name])))
 
             registry_image_re = re.compile("^{}/{}\:(.*)$".format(
-                registry_host, registry_name))
+                registry_hostname, registry_name))
 
             try:
                 github = Github(github_auth_token)
@@ -311,16 +311,17 @@ runs:
                 if len(flux_tags) < len(flux_instances):
                     raise Exception("Bail: finding no referenced tags is weird.")
 
-                if (registry_host.endswith('docker.pkg.dev') or registry_host.startswith('gcr')):
+                if (registry_hostname.endswith('docker.pkg.dev') or
+                        registry_hostname.startswith('gcr')):
                     authorization = gcp_docker_authorization(
-                        registry_host, registry_name, registry_password)
+                        registry_hostname, registry_name, registry_password)
                 else:
                     authorization = docker_authorization(
-                        registry_host, registry_user, registry_password)
+                        registry_hostname, registry_user, registry_password)
 
                 print("::group::Fetch image data from {}".format(registry_name))
                 manifests = get_registry_manifest(
-                    registry_host, registry_name, authorization)
+                    registry_hostname, registry_name, authorization)
                 print("::endgroup::")
 
                 print("::group::Process {} registry image manifests".format(
@@ -346,10 +347,10 @@ runs:
                     # tags must be deleted before the image can be deleted
                     for tag in manifest['tag']:
                         delete_registry_manifest(
-                            registry_host, registry_name, tag, authorization)
+                            registry_hostname, registry_name, tag, authorization)
 
                     delete_registry_manifest(
-                        registry_host, registry_name, sha, authorization)
+                        registry_hostname, registry_name, sha, authorization)
 
                 print("::endgroup::")
 
