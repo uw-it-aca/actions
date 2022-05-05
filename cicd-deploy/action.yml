@@ -214,10 +214,10 @@ runs:
         if [ -n "${REGISTRY_NAME}" ]; then
             VALUES="${VALUES},image.repository=${REGISTRY_NAME}"
         elif [ -n "${REGISTRY_HOSTNAME}" -a -n "${REGISTRY_PROJECT_ID}" ]; then
-            IR_PARTS=("${REGISTRY_HOSTNAME}"
-                      "${REGISTRY_PROJECT_ID}"
-                      "${REGISTRY_PATH}"
-                      "${{ inputs.release_name }}")
+            IR_PARTS=(${REGISTRY_HOSTNAME}
+                      ${REGISTRY_PROJECT_ID}
+                      ${REGISTRY_PATH}
+                      ${{ inputs.release_name }})
             IR=$(IFS=/; echo "${IR_PARTS[*]}")
             VALUES="${VALUES},image.repository=${IR}"
         fi
