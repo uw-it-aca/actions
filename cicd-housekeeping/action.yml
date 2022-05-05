@@ -28,6 +28,10 @@ inputs:
     description: 'Owner id associated with registry'
     default: 'uwit-mci-axdd'
     required: false
+  registry_path:
+    description: 'Registry path'
+    required: false
+    default: ''
   registry_user:
     description: 'Username for registry authentication'
     default: '_json_key'
@@ -262,13 +266,15 @@ runs:
             registry_host     = "${{ inputs.registry_host }}"
             registry_name     = "${{ inputs.registry_name }}"
             registry_owner    = "${{ inputs.registry_owner }}"
+            registry_path     = "${{ inputs.registry_path }}"
             registry_user     = "${{ inputs.registry_user }}"
             registry_password = "${{ inputs.registry_password }}"
             prune_grace_hours = "${{ inputs.prune_grace_hours }}"
             flux_instances    = "${{ inputs.flux_instances }}".split(',')
 
             if len(registry_name) == 0:
-                registry_name = "{}/{}".format(registry_owner, release_name)
+                registry_name = "/".join(filter(
+                    None, [registry_owner, registry_path, release_name])))
 
             registry_image_re = re.compile("^{}/{}\:(.*)$".format(
                 registry_host, registry_name))

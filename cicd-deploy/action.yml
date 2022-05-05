@@ -22,8 +22,20 @@ inputs:
     description: 'Instance name applied to deployment, typically "test"'
     required: false
     default: 'test'
+  registry_hostname:
+    description: 'Registry hostname'
+    required: false
+    default: 'gcr.io'
+  registry_project_id:
+    description: 'GCP project containing registry'
+    required: false
+    default: 'uwit-mci-axdd'
+  registry_path:
+    description: 'Registry path'
+    required: false
+    default: ''
   registry_name:
-    description: 'Docker image registry path'
+    description: 'Docker image registry full path'
     required: false
     default: ''
   gcp_production_project:
@@ -146,6 +158,9 @@ runs:
 
         set_context app_instance             "${APP_INSTANCE}"
         set_context app_name                 "${{ inputs.release_name }}-prod-${APP_INSTANCE}"
+        set_context registry_hostname        "${{ inputs.registry_hostname }}"
+        set_context registry_project_id      "${{ inputs.registry_project_id }}"
+        set_context registry_path            "${{ inputs.registry_path }}"
         set_context registry_name            "${{ inputs.registry_name }}"
         set_context flux_base_name           "${{ inputs.release_name }}${FLUX_RELEASE_SUFFIX}"
         set_context manifest_file_name       "${FLUX_BASE_NAME}.yaml"
@@ -198,6 +213,13 @@ runs:
         VALUES="image.tag=${COMMIT_HASH}"
         if [ -n "${REGISTRY_NAME}" ]; then
             VALUES="${VALUES},image.repository=${REGISTRY_NAME}"
+        elif [ -n "${REGISTRY_HOSTNAME}" -a -n "${REGISTRY_PROJECT_ID}" ]; then
+            IR_PARTS=("${REGISTRY_HOSTNAME}"
+                      "${REGISTRY_PROJECT_ID}"
+                      "${REGISTRY_PATH}"
+                      "${{ inputs.release_name }}")
+            IR=$(IFS=/; echo "${IR_PARTS[*]}")
+            VALUES="${VALUES},image.repository=${IR}"
         fi
 
         docker run -v ${PWD}:/app -v ${HELM_CHART_LOCAL_DIR}:/chart alpine/helm:${{ inputs.helm_app_version }} template ${APP_NAME} /chart --set-string "${VALUES}" -f $HELM_CHART_VALUES > ${LOCAL_MANIFEST}

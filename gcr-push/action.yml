@@ -9,7 +9,11 @@ inputs:
   gcp_json_key:
     description: 'Authentication key for GCP access'
     required: true
-  gcp_project_id:
+  registry_user:
+    description: 'Username for registry authentication'
+    default: '_json_key'
+    required: false
+  registry_project_id:
     description: 'GCP project containing registry'
     required: false
     default: 'uwit-mci-axdd'
@@ -54,7 +58,7 @@ runs:
       run: |
         echo "${{ inputs.gcp_json_key }}" |
           base64 -d |
-          docker login --username=_json_key --password-stdin https://${{ inputs.registry_hostname }}
+          docker login --username=${{ inputs.registry_user }} --password-stdin https://${{ inputs.registry_hostname }}
 
     - name: Tag Image for Registry
       id: reg-tag
@@ -62,7 +66,7 @@ runs:
       run: |
         IMAGE_RELEASE_NAME=$(echo ${{ inputs.image_tag }} | cut -d: -f 1)
         IMAGE_RELEASE_TAG=$(echo ${{ inputs.image_tag }} | cut -d: -f 2)
-        IMAGE_REG_PATH_PARTS=(${{ inputs.gcp_project_id }}
+        IMAGE_REG_PATH_PARTS=(${{ inputs.registry_project_id }}
                               ${{ inputs.registry_path }}
                               ${IMAGE_RELEASE_NAME})
         IMAGE_REG_PATH=$(IFS=/; echo "${IMAGE_REG_PATH_PARTS[*]}")
