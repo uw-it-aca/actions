@@ -1,27 +1,44 @@
-name: 'Google Cloud Registry Push'
+name: 'Google Cloud Registry or Artifact Registry Push'
 
-description: 'Tag and push image to GCR'
+description: 'Tag and push image to Registry'
 
 inputs:
   image_tag:
-    description: 'Image tag to push to GCR'
+    description: 'Image tag to push to Registry'
     required: true
   gcp_json_key:
     description: 'Authentication key for GCP access'
     required: true
-  gcp_project_id:
+  registry_user:
+    description: 'Username for registry authentication'
+    default: '_json_key'
+    required: false
+  registry_project_id:
     description: 'GCP project containing registry'
     required: false
     default: 'uwit-mci-axdd'
-  gcr_hostname:
-    description: 'GCR hostname'
+  registry_hostname:
+    description: 'Registry hostname'
     required: false
     default: 'gcr.io'
+  registry_path:
+    description: 'Registry path'
+    required: false
+    default: ''
 
 outputs:
-  gcr_tag:
-    description: 'GCR image tag'
-    value: ${{ steps.gcr-tag.outputs.gcr_tag }}
+  image_registry_host:
+    description: 'Image registry host'
+    value: ${{ steps.reg-tag.outputs.image_registry_host }}
+  image_registry_path:
+    description: 'Image registry path'
+    value: ${{ steps.reg-tag.outputs.image_registry_path }}
+  image_registry:
+    description: 'Docker image registry'
+    value: ${{ steps.reg-tag.outputs.image_registry }}
+  image_registry_tagged:
+    description: 'Docker image registry name, tagged'
+    value: ${{ steps.reg-tag.outputs.image_registry_tagged }}
 
 runs:
   using: 'composite'
@@ -41,19 +58,31 @@ runs:
       run: |
         echo "${{ inputs.gcp_json_key }}" |
           base64 -d |
-          docker login --username=_json_key --password-stdin https://${{ inputs.gcr_hostname }}
+          docker login --username=${{ inputs.registry_user }} --password-stdin https://${{ inputs.registry_hostname }}
 
-    - name: Tag Image for GCR
-      id: gcr-tag
+    - name: Tag Image for Registry
+      id: reg-tag
       shell: bash
       run: |
-        GCR_TAG=${{ inputs.gcr_hostname }}/${{ inputs.gcp_project_id }}/${{ inputs.image_tag }}
-        docker tag "${{ inputs.image_tag }}" "$GCR_TAG"
-        echo "::set-output name=gcr_tag::$GCR_TAG"
+        IMAGE_RELEASE_NAME=$(echo ${{ inputs.image_tag }} | cut -d: -f 1)
+        IMAGE_RELEASE_TAG=$(echo ${{ inputs.image_tag }} | cut -d: -f 2)
+        IMAGE_REG_PATH_PARTS=(${{ inputs.registry_project_id }}
+                              ${{ inputs.registry_path }}
+                              ${IMAGE_RELEASE_NAME})
+        IMAGE_REG_PATH=$(IFS=/; echo "${IMAGE_REG_PATH_PARTS[*]}")
+        IMAGE_REG=${{ inputs.registry_hostname }}/${IMAGE_REG_PATH}
+        IMAGE_REG_TAG=${IMAGE_REG}:${IMAGE_RELEASE_TAG}
 
-    - name: Push Image to GCR
-      id: gcr-push
+        docker tag "${{ inputs.image_tag }}" "$IMAGE_REG_TAG"
+
+        echo "::set-output name=image_registry_host::${{ inputs.registry_hostname }}"
+        echo "::set-output name=image_registry_path::$IMAGE_REG_PATH"
+        echo "::set-output name=image_registry::$IMAGE_REG"
+        echo "::set-output name=image_registry_tagged::$IMAGE_REG_TAG"
+
+    - name: Push Image to Registry
+      id: reg-push
       shell: bash
       run: |
-        docker push "${{ steps.gcr-tag.outputs.gcr_tag }}"
-        echo "pushed ${{ steps.gcr-tag.outputs.gcr_tag }}"
+        docker push "${{ steps.reg-tag.outputs.image_registry_tagged }}"
+        echo "pushed ${{ steps.reg-tag.outputs.image_registry_tagged }}"
