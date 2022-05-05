@@ -29,7 +29,7 @@ inputs:
     default: 'uwit-mci-axdd'
     required: false
   registry_path:
-    description: 'Registry path'
+    description: 'Registry path component'
     required: false
     default: ''
   registry_user:
