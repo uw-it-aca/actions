@@ -274,7 +274,7 @@ runs:
 
             if len(registry_name) == 0:
                 registry_name = "/".join(filter(
-                    None, [registry_owner, registry_path, release_name])))
+                    None, [registry_owner, registry_path, release_name]))
 
             registry_image_re = re.compile("^{}/{}\:(.*)$".format(
                 registry_hostname, registry_name))
