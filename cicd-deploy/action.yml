@@ -65,7 +65,7 @@ inputs:
   helm_chart_branch:
     description: 'Helm chart repository branch at the base of release'
     required: false
-    default: 'master'
+    default: 'main'
   helm_chart_name:
     description: 'Helm chart repository used to produce release manifest'
     required: false
