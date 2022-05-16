@@ -202,7 +202,7 @@ runs:
 
         git clone --depth 1 $HELM_CHART_REPO_PATH --branch ${{ inputs.helm_chart_branch }} ${HELM_CHART_LOCAL_DIR}
 
-        echo "::set-output name=chart_version::$(git rev-parse ${{ inputs.helm_chart_branch }} | cut -b 1-7)"
+        echo "::set-output name=chart_version::$(cd ${HELM_CHART_LOCAL_DIR}; git rev-parse ${{ inputs.helm_chart_branch }} | cut -b 1-7)"
 
         echo "::endgroup::"
 
