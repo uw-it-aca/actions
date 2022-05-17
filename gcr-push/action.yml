@@ -20,11 +20,11 @@ inputs:
   registry_hostname:
     description: 'Registry hostname'
     required: false
-    default: 'gcr.io'
+    default: 'us-docker.pkg.dev'
   registry_path:
     description: 'Registry path'
     required: false
-    default: ''
+    default: 'containers'
 
 outputs:
   image_registry_host:

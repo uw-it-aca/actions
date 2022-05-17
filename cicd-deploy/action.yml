@@ -25,7 +25,7 @@ inputs:
   registry_hostname:
     description: 'Registry hostname'
     required: false
-    default: 'gcr.io'
+    default: 'us-docker.pkg.dev'
   registry_project_id:
     description: 'GCP project containing registry'
     required: false
@@ -33,7 +33,7 @@ inputs:
   registry_path:
     description: 'Registry path'
     required: false
-    default: ''
+    default: 'containers'
   registry_name:
     description: 'Docker image registry full path'
     required: false
