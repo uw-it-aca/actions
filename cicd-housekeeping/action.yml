@@ -22,7 +22,7 @@ inputs:
     required: false
   registry_hostname:
     description: 'Name of host containing image registry'
-    default: 'gcr.io'
+    default: 'us-docker.pkg.dev'
     required: false
   registry_owner:
     description: 'Owner id associated with registry'
@@ -31,7 +31,7 @@ inputs:
   registry_path:
     description: 'Registry path component'
     required: false
-    default: ''
+    default: 'containers'
   registry_user:
     description: 'Username for registry authentication'
     default: '_json_key'
