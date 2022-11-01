@@ -182,7 +182,7 @@ runs:
         JSON_CONTEXT=\'{${JSON_CONTEXT}}\'
         echo "json_context = $JSON_CONTEXT"
         echo "::endgroup::"
-        echo "::set-output name=json_context::${JSON_CONTEXT}"
+        echo "json_context=${JSON_CONTEXT}" >> $GITHUB_OUTPUT
 
         echo "::group::Save context"
         set_context context_filename ${{ inputs.context_filename }}
@@ -202,7 +202,7 @@ runs:
 
         git clone --depth 1 $HELM_CHART_REPO_PATH --branch ${{ inputs.helm_chart_branch }} ${HELM_CHART_LOCAL_DIR}
 
-        echo "::set-output name=chart_version::$(cd ${HELM_CHART_LOCAL_DIR}; git rev-parse ${{ inputs.helm_chart_branch }} | cut -b 1-7)"
+        echo "chart_version=$(cd ${HELM_CHART_LOCAL_DIR}; git rev-parse ${{ inputs.helm_chart_branch }} | cut -b 1-7)" >> $GITHUB_OUTPUT
 
         echo "::endgroup::"
 

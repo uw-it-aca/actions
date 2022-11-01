@@ -75,10 +75,10 @@ runs:
 
         docker tag "${{ inputs.image_tag }}" "$IMAGE_REG_TAG"
 
-        echo "::set-output name=image_registry_host::${{ inputs.registry_hostname }}"
-        echo "::set-output name=image_registry_path::$IMAGE_REG_PATH"
-        echo "::set-output name=image_registry::$IMAGE_REG"
-        echo "::set-output name=image_registry_tagged::$IMAGE_REG_TAG"
+        echo "image_registry_host=${{ inputs.registry_hostname }}" >> $GITHUB_OUTPUT
+        echo "image_registry_path=$IMAGE_REG_PATH" >> $GITHUB_OUTPUT
+        echo "image_registry=$IMAGE_REG" >> $GITHUB_OUTPUT
+        echo "image_registry_tagged=$IMAGE_REG_TAG" >> $GITHUB_OUTPUT
 
     - name: Push Image to Registry
       id: reg-push
