@@ -42,7 +42,7 @@ runs:
 
         function set_context {
           echo "$1 = $2"
-          echo "::set-output name=${1}::${2}"
+          echo "${1}=${2}" >> $GITHUB_OUTPUT
           export ${1^^}=${2}
           if [[ -n $JSON_CONTEXT ]]; then COMMA="," ; else COMMA="" ; fi
           JSON_CONTEXT="${JSON_CONTEXT}${COMMA}\"${1}\": \"${2}\""
@@ -57,4 +57,4 @@ runs:
         JSON_CONTEXT=\'{${JSON_CONTEXT}}\'
         echo "json_context = $JSON_CONTEXT"
         echo "::endgroup::"
-        echo "::set-output name=json_context::${JSON_CONTEXT}"
+        echo "json_context=${JSON_CONTEXT}" >> $GITHUB_OUTPUT
