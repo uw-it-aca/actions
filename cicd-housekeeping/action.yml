@@ -135,6 +135,7 @@ runs:
         python3 -m pip install --upgrade pip==20.2.4
         python3 -m pip install --upgrade setuptools wheel
         python3 -m pip install --upgrade pyyaml>=6.0 pygithub
+        python3 -m pip install --upgrade pyopenssl
         echo "::endgroup::"
 
         python3 - <<EOF
