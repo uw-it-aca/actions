@@ -263,7 +263,7 @@ runs:
     - name: Security Policy Scan
       shell: bash
       run: |
-        if [[ -n $(grep -e '^\s*securityContext\:.*$' "${LOCAL_MANIFEST}") ]]; then
+        if [[ -n $(grep -e '^\s*axdd\.s.uw\.edu\/security-policy\: applied\s*$' "${LOCAL_MANIFEST}") ]]; then
           echo "::group::SCAN manifest ${MANIFEST_FILE_NAME} security policies (checkov ${{ inputs.checkov_version }})"
 
           CHECKOV_IMAGE="bridgecrew/checkov:${{ inputs.checkov_version }}"
