@@ -242,8 +242,7 @@ runs:
 
         echo "::group::VALIDATE generated manifest ${MANIFEST_FILE_NAME}"
 
-        KUBECONFORM_IMAGE="{{ inputs.kubeconform_image }}:{{ inputs.kubeconform_version }}"
-        docker run -t -v ${PWD}/:/manifest "$KUBECONFORM_IMAGE" -strict -verbose -ignore-missing-schemas /manifest/${MANIFEST_FILE_NAME}
+        docker run -t -v ${PWD}/:/manifest -- "{{ inputs.kubeconform_image }}:{{ inputs.kubeconform_version }}" -strict -verbose -ignore-missing-schemas /manifest/${MANIFEST_FILE_NAME}
 
         echo "::endgroup::"
 
