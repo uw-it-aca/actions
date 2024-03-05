@@ -78,18 +78,14 @@ inputs:
     description: 'Kubernetes schema version for kubeval to validate'
     required: false
     default: 'master'
-  kubeval_version:
-    description: 'Kubeval version used to lint kubernetes manifest'
+  kubeconform_image:
+    description: 'Kubeconform image used to validate kubernetes manifest'
+    required: false
+    default: 'ghcr.io/yannh/kubeconform'
+  kubeconform_version:
+    description: 'Kubeconform version used to validate kubernetes manifest'
     required: false
     default: 'latest'
-  kubeval_schema_location:
-    description: 'Kubeval --schema-location argument'
-    required: false
-    default: 'https://raw.githubusercontent.com/yannh/kubernetes-json-schema'
-  kubeval_skip_kinds:
-    description: 'List of manifest objects for Kubeval to ignore'
-    required: false
-    default: 'ExternalSecret,ServiceMonitor'
   checkov_version:
     description: 'Checkov security policy manifest scanner version'
     required: false
@@ -244,20 +240,11 @@ runs:
         fi
         echo "::endgroup::"
 
-        export KUBEVAL_DIR=kubeval-dist
-        echo "::group::FETCH kubeval to validate manifest"
-
-        (
-            mkdir -p $KUBEVAL_DIR
-            cd $KUBEVAL_DIR
-            wget https://github.com/instrumenta/kubeval/releases/${{ inputs.kubeval_version }}/download/kubeval-linux-amd64.tar.gz
-            tar xzf kubeval-linux-amd64.tar.gz
-        )
-
-        echo "::endgroup::"
         echo "::group::VALIDATE generated manifest ${MANIFEST_FILE_NAME}"
 
-        ./${KUBEVAL_DIR}/kubeval ${PWD}/${MANIFEST_FILE_NAME} --schema-location "${{ inputs.kubeval_schema_location }}/${{ inputs.kubernetes_version }}" --strict --skip-kinds "${{ inputs.kubeval_skip_kinds }}"
+        KUBECONFORM_IMAGE="${{ inputs.kubeconform_image  }}:${{ inputs.kubeconform_version }}"
+        docker run -t -v ${PWD}/:/manifest "$KUBECONFORM_IMAGE" -strict -verbose -ignore-missing-schemas /manifest/${MANIFEST_FILE_NAME}
+
         echo "::endgroup::"
 
     - name: Security Policy Scan
