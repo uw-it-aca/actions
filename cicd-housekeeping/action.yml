@@ -132,7 +132,7 @@ runs:
 
         echo "::group::Python setup"
         sudo apt install python3-setuptools
-        python3 -m pip install --upgrade pip==20.2.4
+        python3 -m pip install --upgrade pip~=24.3
         python3 -m pip install --upgrade setuptools wheel
         python3 -m pip install --upgrade pyyaml>=6.0 pygithub
         python3 -m pip install --upgrade pyopenssl
