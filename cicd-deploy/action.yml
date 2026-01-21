@@ -160,7 +160,7 @@ runs:
         set_context app_instance             "${APP_INSTANCE}"
         set_context release_instance         "$([ -n "${{ inputs.release_instance }}" ] && echo "-${{ inputs.release_instance }}" || echo "")"
         set_context full_release_name        "${{ inputs.release_name }}${RELEASE_INSTANCE}"
-        set_context app_name                 "-prod-${APP_INSTANCE}"
+        set_context app_name                 "${FULL_RELEASE_NAME}-prod-${APP_INSTANCE}"
         set_context registry_hostname        "${{ inputs.registry_hostname }}"
         set_context registry_project_id      "${{ inputs.registry_project_id }}"
         set_context registry_path            "${{ inputs.registry_path }}"
