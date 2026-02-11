@@ -13,6 +13,10 @@ inputs:
     description: 'Length of application commit hash used as image tag'
     required: false
     default: 7
+  helm_values_path:
+    description: 'File path to project helm values files'
+    required: false
+    default: docker
 
 outputs:
   commit_hash:
@@ -27,6 +31,9 @@ outputs:
   json_context:
     description: "Serialized JSON context for this release"
     value: ${{ steps.context.outputs.json_context }}
+  instance_matrix:
+    description: "Instance of each values file for release"
+    value: ${{ steps.context.outputs.instance_matrix }}
 
 runs:
   using: 'composite'
@@ -53,6 +60,18 @@ runs:
         set_context image_tag        "${{ inputs.release_name }}:$COMMIT_HASH"
         set_context github_ref       "${{ github.ref }}"
         set_context git_repo_branch  "${GITHUB_REF#refs/heads/}"
+
+        #
+        # The instance matrix is collected by sniffing at the project's helm
+        # values file name. Each file name of the format
+        # {prod|test}-NN-values.yml where N is a digit will be interpreted as
+        # an instance and added to the instance_matrix list. The instance_matrix
+        # reference needs to be added to the project's workflow/cicd.yml
+        # file's appropriate job stanzas to be useful.
+        #
+        RELEASE_INSTANCE=$([ "${GIT_REPO_BRANCH}" == "main" ] && echo "prod" || echo "test")
+        INSTANCES=$(find ${{ github.workspace }}/${{ inputs.helm_values_path }}/ -name "${RELEASE_INSTANCE}-*[0-9]*-values.yml" -exec sh -c 'echo {} | sed -e "s/.*-\([[:digit:]]\{1,\}\)-.*/\1/"' \; | awk '{printf "%s\"%s\"", (NR>1?",":""), $1}')
+        set_context instance_matrix  $([ -n "$INSTANCES" ] && echo "[${INSTANCES}]" || echo "")
 
         JSON_CONTEXT=\'{${JSON_CONTEXT}}\'
         echo "json_context = $JSON_CONTEXT"
