@@ -137,8 +137,9 @@ jobs:
         with:
           image_tag: ${{ needs.context.outputs.image_tag }}
           severity: 'HIGH,CRITICAL'
-          
+
       - name: Fail on vulnerabilities (optional step)
+        # Remove this entire block if you don't want to fail the build
         if: steps.vuln-scan.outputs.vulnerabilities_found == 'true'
         shell: bash
         run: |
