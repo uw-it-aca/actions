@@ -1,0 +1,61 @@
+name: 'Container Vulnerability Scan'
+
+description: 'Scan container image for security vulnerabilities and upload as sarif to GitHub security tab'
+
+inputs:
+  image_tag:
+    description: 'Full image reference to scan (name:tag)'
+    required: true
+  severity:
+    description: 'Vulnerability severities to report'
+    required: false
+    default: 'HIGH,CRITICAL'
+  upload_results:
+    description: 'Whether to upload results to GitHub Security tab'
+    required: false
+    default: 'true'
+
+outputs:
+  vulnerabilities_found:
+    description: 'Whether vulnerabilities were found (true/false)'
+    value: ${{ steps.scan-results.outputs.vulnerabilities_found }}
+  results_file:
+    description: 'Path to the vulnerability scan results file'
+    value: ${{ steps.scan-results.outputs.results_file }}
+
+runs:
+  using: 'composite'
+  
+  steps:
+    - name: Run Trivy vulnerability scanner
+      id: scan
+      uses: aquasecurity/trivy-action@c1824fd6edce30d7ab345a9989de00bbd46ef284
+      with:
+        image-ref: ${{ inputs.image_tag }}
+        severity: ${{ inputs.severity }}
+        format: sarif
+        output: 'trivy-results.sarif'
+        
+    - name: Check scan results
+      if: success()
+      id: scan-results
+      shell: bash
+      run: |
+        if [[ -f "trivy-results.sarif" ]]; then
+          echo "results_file=trivy-results.sarif" >> $GITHUB_OUTPUT
+          # Check if vulnerabilities were found
+          if grep -qE '"level": "(error|warning)"' "trivy-results.sarif"; then
+            echo "vulnerabilities_found=true" >> $GITHUB_OUTPUT
+          else
+            echo "vulnerabilities_found=false" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "results_file=" >> $GITHUB_OUTPUT
+          echo "vulnerabilities_found=false" >> $GITHUB_OUTPUT
+        fi
+      
+    - name: Upload Trivy results to GitHub Security
+      uses: github/codeql-action/upload-sarif@v4
+      if: success() && inputs.upload_results == 'true' && hashFiles('trivy-results.sarif') != ''
+      with:
+        sarif_file: 'trivy-results.sarif'
