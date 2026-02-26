@@ -1,0 +1,23 @@
+# Example .trivyignore.yaml file
+# This file allows you to ignore specific vulnerabilities during Trivy scans
+
+# Ignore specific CVEs
+- id: CVE-2023-1234
+  reason: "False positive - not applicable in our use case"
+  
+- id: CVE-2022-5678
+  reason: "Fixed in our custom build but not reflected in package version"
+
+# Ignore vulnerabilities by package
+- package: "example-package"
+  version: "1.2.3"
+  reason: "Package is used in test environment only"
+
+# Ignore by severity level for specific packages
+- package: "dev-dependency"
+  severity: LOW
+  reason: "Development dependency with acceptable risk"
+
+# Ignore all vulnerabilities in a specific path
+- path: "/usr/share/doc/*"
+  reason: "Documentation files don't affect runtime security"
