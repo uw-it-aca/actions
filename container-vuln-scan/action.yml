@@ -90,13 +90,62 @@ runs:
       run: |
         if [[ -f "trivy-results.sarif" ]]; then
           echo "results_file=trivy-results.sarif" >> $GITHUB_OUTPUT
-          # Check if vulnerabilities were found
-          if grep -qE '"level": "(error|warning)"' "trivy-results.sarif"; then
+
+          # Map severity labels to their CVSS lower bounds.
+          # We take the lowest bound among all configured severities so that
+          # the >= comparison catches everything the user asked for.
+          # e.g. "HIGH,CRITICAL" -> min(7.0, 9.0) -> 7.0
+          severity_threshold=11.0  # start above max so any valid match lowers it
+          IFS=',' read -ra severity_list <<< "${{ inputs.severity }}"
+          for sev in "${severity_list[@]}"; do
+            case "${sev^^}" in
+              CRITICAL) bound=9.0 ;;
+              HIGH)     bound=7.0 ;;
+              MEDIUM)   bound=4.0 ;;
+              LOW)      bound=0.0 ;;
+              *)
+                echo "Warning: unrecognized severity '${sev}', skipping" >&2
+                continue
+                ;;
+            esac
+            # Use awk for float comparison since bash only does integers
+            if awk -v a="$bound" -v b="$severity_threshold" 'BEGIN { exit !(a < b) }'; then
+              severity_threshold="$bound"
+            fi
+          done
+
+          if [[ "$severity_threshold" == "11.0" ]]; then
+            echo "Warning: no valid severities parsed from '${{ inputs.severity }}', defaulting to HIGH (7.0)" >&2
+            severity_threshold=7.0
+          fi
+
+          echo "Using security-severity threshold: >= ${severity_threshold}"
+
+          # security-severity lives on tool.driver.rules[], not results[]
+          raw_count=$(jq --argjson threshold "$severity_threshold" '
+            [
+              .runs[]?.tool.driver.rules[]?.properties?."security-severity" // empty
+              | tonumber
+              | select(. >= $threshold)
+            ] | length
+          ' "trivy-results.sarif" 2>/dev/null)
+
+          # Sanitize: fallback to 0 if empty or non-numeric
+          vuln_count=${raw_count:-0}
+          if ! [[ "$vuln_count" =~ ^[0-9]+$ ]]; then
+            echo "Warning: unexpected jq output '${vuln_count}', defaulting to 0" >&2
+            vuln_count=0
+          fi
+
+          if [[ "$vuln_count" -gt 0 ]]; then
             echo "vulnerabilities_found=true" >> $GITHUB_OUTPUT
+            echo "Found $vuln_count vulnerabilities with security-severity >= ${severity_threshold}"
           else
             echo "vulnerabilities_found=false" >> $GITHUB_OUTPUT
+            echo "No vulnerabilities found with security-severity >= ${severity_threshold}"
           fi
         else
+          echo "Warning: trivy-results.sarif not found" >&2
           echo "results_file=" >> $GITHUB_OUTPUT
           echo "vulnerabilities_found=false" >> $GITHUB_OUTPUT
         fi
