@@ -14,6 +14,10 @@ inputs:
     description: 'Whether to upload results to GitHub Security tab'
     required: false
     default: 'true'
+  ignorefile:
+    description: 'Path to Trivy ignore file (defaults to .trivyignore.yaml if it exists)'
+    required: false
+    default: ''
 
 outputs:
   vulnerabilities_found:
@@ -27,8 +31,50 @@ runs:
   using: 'composite'
   
   steps:
-    - name: Run Trivy vulnerability scanner
-      id: scan
+    - name: Check for Trivy ignore file
+      id: check-ignorefile
+      shell: bash
+      run: |
+        ignorefile="${{ inputs.ignorefile }}"
+        
+        # If no ignorefile is specified, check for default .trivyignore.yaml
+        if [[ -z "$ignorefile" ]]; then
+          if [[ -f ".trivyignore.yaml" ]]; then
+            ignorefile=".trivyignore.yaml"
+            echo "Found default .trivyignore.yaml file"
+          fi
+        fi
+        
+        # Check if the specified ignore file exists
+        if [[ -n "$ignorefile" ]]; then
+          if [[ -f "$ignorefile" ]]; then
+            echo "ignorefile_path=$ignorefile" >> $GITHUB_OUTPUT
+            echo "use_ignorefile=true" >> $GITHUB_OUTPUT
+            echo "Using Trivy ignore file: $ignorefile"
+          else
+            echo "Warning: Specified ignore file '$ignorefile' not found, proceeding without it"
+            echo "ignorefile_path=" >> $GITHUB_OUTPUT
+            echo "use_ignorefile=false" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "ignorefile_path=" >> $GITHUB_OUTPUT
+          echo "use_ignorefile=false" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Run Trivy vulnerability scanner (with ignorefile)
+      if: steps.check-ignorefile.outputs.use_ignorefile == 'true'
+      id: scan-with-ignore
+      uses: aquasecurity/trivy-action@c1824fd6edce30d7ab345a9989de00bbd46ef284
+      with:
+        image-ref: ${{ inputs.image_tag }}
+        severity: ${{ inputs.severity }}
+        format: sarif
+        output: 'trivy-results.sarif'
+        ignorefile: ${{ steps.check-ignorefile.outputs.ignorefile_path }}
+        
+    - name: Run Trivy vulnerability scanner (without ignorefile)
+      if: steps.check-ignorefile.outputs.use_ignorefile == 'false'
+      id: scan-without-ignore
       uses: aquasecurity/trivy-action@c1824fd6edce30d7ab345a9989de00bbd46ef284
       with:
         image-ref: ${{ inputs.image_tag }}
