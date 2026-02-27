@@ -70,7 +70,8 @@ runs:
         severity: ${{ inputs.severity }}
         format: sarif
         output: 'trivy-results.sarif'
-        trivyignores: ${{ steps.check-ignorefile.outputs.ignorefile_path }}
+      env:
+        TRIVY_IGNOREFILE: ${{ steps.check-ignorefile.outputs.ignorefile_path }}
         
     - name: Run Trivy vulnerability scanner (without ignorefile)
       if: steps.check-ignorefile.outputs.use_ignorefile == 'false'
