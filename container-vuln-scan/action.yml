@@ -64,7 +64,7 @@ runs:
     - name: Run Trivy vulnerability scanner (with ignorefile)
       if: steps.check-ignorefile.outputs.use_ignorefile == 'true'
       id: scan-with-ignore
-      uses: aquasecurity/trivy-action@0.35.0
+      uses: aquasecurity/trivy-action@v0.35.0
       with:
         image-ref: ${{ inputs.image_tag }}
         severity: ${{ inputs.severity }}
@@ -76,7 +76,7 @@ runs:
     - name: Run Trivy vulnerability scanner (without ignorefile)
       if: steps.check-ignorefile.outputs.use_ignorefile == 'false'
       id: scan-without-ignore
-      uses: aquasecurity/trivy-action@0.35.0
+      uses: aquasecurity/trivy-action@v0.35.0
       with:
         image-ref: ${{ inputs.image_tag }}
         severity: ${{ inputs.severity }}
