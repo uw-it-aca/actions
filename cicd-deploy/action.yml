@@ -90,6 +90,14 @@ inputs:
     description: 'Kubeconform version used to validate kubernetes manifest'
     required: false
     default: 'latest'
+  flux_merge_retry_count:
+    description: 'Number of retries after flux pull request merge failure'
+    required: false
+    default: 1
+  flux_merge_retry_timeout:
+    description: 'Seconds to wait before retrying flux pull request merge after failure'
+    required: false
+    default: 30
   checkov_version:
     description: 'Checkov security policy manifest scanner version'
     required: false
@@ -180,6 +188,7 @@ runs:
         set_context flux_release_manifest    "releases/${FLUX_INSTANCE}/$MANIFEST_FILE_NAME"
         set_context flux_local_dir           "${PWD}/$FLUX_REPO_NAME"
         set_context flux_pr_output           "${PWD}/pr-${FLUX_INSTANCE}-${FULL_RELEASE_NAME}-${COMMIT_HASH}.json"
+        set_context flux_merge_output        "${PWD}/merge-${FLUX_INSTANCE}-${FULL_RELEASE_NAME}-${COMMIT_HASH}.json"
         set_context commit_message           "Automated ${FLUX_INSTANCE} deploy of ${{ github.repository }}:${COMMIT_HASH} build ${{ github.run_id }}"
         set_context pull_request_message     "Automated ${FLUX_INSTANCE} deploy of [${{ github.repository }}:${COMMIT_HASH}](/${{ github.repository }}/commit/${COMMIT_HASH})  Generated build [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
 
@@ -323,7 +332,12 @@ runs:
         EOF
         )
 
-        curl -H "Authorization: Token ${{ inputs.gh_auth_token }}" -H "Content-type: application/json" -X POST ${GITHUB_REPO_PULLS} >${FLUX_PR_OUTPUT} -d @- <<<${PR_DATA}
+        curl --silent --show-error \
+             -H "Authorization: Token ${{ inputs.gh_auth_token }}" \
+             -H "Content-type: application/json" \
+             -X POST ${GITHUB_REPO_PULLS} \
+             -o ${FLUX_PR_OUTPUT} \
+             -d @- <<<${PR_DATA}
         FLUX_PULL_URL=$(jq '.html_url' ${FLUX_PR_OUTPUT})
         echo "FLUX_PULL_URL=$FLUX_PULL_URL" >> $GITHUB_ENV
         echo "SUBMITTED $FLUX_PULL_URL"
@@ -350,7 +364,34 @@ runs:
           echo "::group::MERGING ${FLUX_PULL_URL}"
 
           GITHUB_API_MERGE="$(jq --raw-output '.url' ${FLUX_PR_OUTPUT})/merge"
-          curl -H "Authorization: Token ${{ inputs.gh_auth_token }}" -H "Content-type: application/json" -X PUT $GITHUB_API_MERGE -d @- <<<${MERGE_DATA}
+
+          for i in $(seq $((${{ inputs.flux_merge_retry_count }} + 1))); do
+
+            curl --silent --show-error \
+              -H "Authorization: Token ${{ inputs.gh_auth_token }}" \
+              -H "Content-type: application/json" \
+              -X PUT $GITHUB_API_MERGE \
+              -o $FLUX_MERGE_OUTPUT \
+              -d @- <<<${MERGE_DATA}
+
+            MERGE_MESSAGE=$(jq -r '.message' $FLUX_MERGE_OUTPUT)
+            MERGE_STATUS=$(jq -r '.status' $FLUX_MERGE_OUTPUT)
+
+            if [[ "true" = $(jq -r '.merged' $FLUX_MERGE_OUTPUT) ]]; then
+              echo $MERGE_MESSAGE
+              break
+            fi
+
+            echo "::error::Flux branch merge failed ($MERGE_STATUS): $MERGE_MESSAGE"
+
+            if [[ "405" != $MERGE_STATUS ]]; then
+              break
+            fi
+
+            echo "::notice::Retrying failed merge in ${{ flux_merge_retry_timeout }} seconds."
+            sleep ${{ flux_merge_retry_timeout }}
+
+          done
 
           echo "::endgroup::"
         fi
