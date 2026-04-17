@@ -3,7 +3,7 @@ name: 'Container Vulnerability Scan'
 description: >
   Scan container image for security vulnerabilities and upload as sarif to
   GitHub security tab. Note that sarif upload only works for public
-  repositories, due to licensing restrictions.'
+  repositories, due to licensing restrictions.
 
 inputs:
   image_tag:

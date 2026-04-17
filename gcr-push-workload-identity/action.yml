@@ -49,6 +49,9 @@ runs:
       with:
         workload_identity_provider: ${{ inputs.workload_identity_provider }}
 
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+
     - name: Configure Docker for Artifact Registry
       shell: bash
       run: |
