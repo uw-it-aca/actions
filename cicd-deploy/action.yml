@@ -388,8 +388,8 @@ runs:
               break
             fi
 
-            echo "::notice::Retrying failed merge in ${{ flux_merge_retry_timeout }} seconds."
-            sleep ${{ flux_merge_retry_timeout }}
+            echo "::notice::Retrying failed merge in ${{ inputs.flux_merge_retry_timeout }} seconds."
+            sleep ${{ inputs.flux_merge_retry_timeout }}
 
           done
 
