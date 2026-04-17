@@ -1,6 +1,9 @@
 name: 'Container Vulnerability Scan'
 
-description: 'Scan container image for security vulnerabilities and upload as sarif to GitHub security tab'
+description: >
+  Scan container image for security vulnerabilities and upload as sarif to
+  GitHub security tab. Note that sarif upload only works for public
+  repositories, due to licensing restrictions.
 
 inputs:
   image_tag:
@@ -64,7 +67,7 @@ runs:
     - name: Run Trivy vulnerability scanner (with ignorefile)
       if: steps.check-ignorefile.outputs.use_ignorefile == 'true'
       id: scan-with-ignore
-      uses: aquasecurity/trivy-action@0.35.0
+      uses: aquasecurity/trivy-action@v0.35.0
       with:
         image-ref: ${{ inputs.image_tag }}
         severity: ${{ inputs.severity }}
@@ -76,7 +79,7 @@ runs:
     - name: Run Trivy vulnerability scanner (without ignorefile)
       if: steps.check-ignorefile.outputs.use_ignorefile == 'false'
       id: scan-without-ignore
-      uses: aquasecurity/trivy-action@0.35.0
+      uses: aquasecurity/trivy-action@v0.35.0
       with:
         image-ref: ${{ inputs.image_tag }}
         severity: ${{ inputs.severity }}
