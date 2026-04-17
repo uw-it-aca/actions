@@ -161,7 +161,7 @@ jobs:
         uses: uw-it-aca/actions/gcr-push-workload-identity@main
         with:
           image_tag: ${{ needs.context.outputs.image_tag }}
-          workload_identity_provider: 'projects/12345678/locations/global/workloadIdentityPools/github-actions-pool/providers/github-actions'
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           add_latest_tag: 'true'
 
   deploy:
