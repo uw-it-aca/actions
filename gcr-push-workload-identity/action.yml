@@ -1,0 +1,93 @@
+name: 'Google Cloud Registry or Artifact Registry Push'
+
+description: 'Tag and push image to Registry'
+
+inputs:
+  image_tag:
+    description: 'Image tag to push to Registry'
+    required: true
+  workload_identity_provider:
+    description: 'Workload Identity Provider for GCP authentication'
+    required: true
+  add_latest_tag:
+    description: 'Also push image with latest tag'
+    default: 'false'
+    required: false
+  registry_project_id:
+    description: 'GCP project containing registry'
+    required: false
+    default: 'uwit-mci-axdd'
+  registry_hostname:
+    description: 'Registry hostname'
+    required: false
+    default: 'us-docker.pkg.dev'
+  registry_path:
+    description: 'Registry path'
+    required: false
+    default: 'containers'
+
+outputs:
+  image_registry_host:
+    description: 'Image registry host'
+    value: ${{ steps.reg-tag.outputs.image_registry_host }}
+  image_registry_path:
+    description: 'Image registry path'
+    value: ${{ steps.reg-tag.outputs.image_registry_path }}
+  image_registry:
+    description: 'Docker image registry'
+    value: ${{ steps.reg-tag.outputs.image_registry }}
+  image_registry_tagged:
+    description: 'Docker image registry name, tagged'
+    value: ${{ steps.reg-tag.outputs.image_registry_tagged }}
+
+runs:
+  using: 'composite'
+
+  steps:
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v3
+      with:
+        workload_identity_provider: ${{ inputs.workload_identity_provider }}
+        project_id: ${{ inputs.registry_project_id }}
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v3
+
+    - name: Configure Docker for Artifact Registry
+      shell: bash
+      run: |
+        gcloud auth configure-docker ${{ inputs.registry_hostname }} --quiet
+
+    - name: Tag Image for Registry
+      id: reg-tag
+      shell: bash
+      run: |
+        IMAGE_RELEASE_NAME=$(echo ${{ inputs.image_tag }} | cut -d: -f 1)
+        IMAGE_RELEASE_TAG=$(echo ${{ inputs.image_tag }} | cut -d: -f 2)
+        IMAGE_REG_PATH_PARTS=(${{ inputs.registry_project_id }}
+                              ${{ inputs.registry_path }}
+                              ${IMAGE_RELEASE_NAME})
+        IMAGE_REG_PATH=$(IFS=/; echo "${IMAGE_REG_PATH_PARTS[*]}")
+        IMAGE_REG=${{ inputs.registry_hostname }}/${IMAGE_REG_PATH}
+        IMAGE_REG_TAG=${IMAGE_REG}:${IMAGE_RELEASE_TAG}
+
+        docker tag "${{ inputs.image_tag }}" "$IMAGE_REG_TAG"
+
+        echo "image_registry_host=${{ inputs.registry_hostname }}" >> $GITHUB_OUTPUT
+        echo "image_registry_path=$IMAGE_REG_PATH" >> $GITHUB_OUTPUT
+        echo "image_registry=$IMAGE_REG" >> $GITHUB_OUTPUT
+        echo "image_registry_tagged=$IMAGE_REG_TAG" >> $GITHUB_OUTPUT
+
+    - name: Push Image to Registry
+      id: reg-push
+      shell: bash
+      run: |
+        docker push "${{ steps.reg-tag.outputs.image_registry_tagged }}"
+        echo "pushed ${{ steps.reg-tag.outputs.image_registry_tagged }}"
+        
+        if [[ "${{ inputs.add_latest_tag }}" == "true" ]]; then
+          IMAGE_REG_LATEST=${{ steps.reg-tag.outputs.image_registry }}:latest
+          docker tag "${{ inputs.image_tag }}" "$IMAGE_REG_LATEST"
+          docker push "$IMAGE_REG_LATEST"
+          echo "pushed $IMAGE_REG_LATEST"
+        fi
