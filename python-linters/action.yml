@@ -16,7 +16,7 @@ inputs:
   copyright_owner:
     description: 'Copyright owner to check'
     required: false
-    default: 'UW-IT, University of Washington'
+    default: 'UW-?IT, University of Washington'
 
 runs:
   using: 'composite'
