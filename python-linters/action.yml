@@ -13,10 +13,6 @@ inputs:
     description: 'License to check'
     required: false
     default: 'Apache-2.0'
-  copyright_owner:
-    description: 'Copyright owner to check'
-    required: false
-    default: 'UW-IT, University of Washington'
 
 runs:
   using: 'composite'
@@ -35,7 +31,7 @@ runs:
       run: >-
         if [[ -f "./LICENSE" ]]; then
           LICENSE_ERR=$(find ${{ inputs.app_name }} -type f -size +0 -not -path "*/migrations/*" -name "*.py"\
-            -exec grep -PzL "# Copyright $(date +'%Y') ${{ inputs.copyright_owner }}\n# SPDX-License-Identifier: ${{ inputs.license }}" {} \;)
+            -exec grep -PzL "# Copyright $(date +'%Y') UW-?IT, University of Washington\n# SPDX-License-Identifier: ${{ inputs.license }}" {} \;)
           if [[ ! -z $LICENSE_ERR ]]; then
             echo "Missing License or Copyright information:"
             echo "$LICENSE_ERR"
