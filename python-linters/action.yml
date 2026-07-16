@@ -5,6 +5,10 @@ description: 'Runs checks for python apps'
 inputs:
   app_name:
     required: true
+  linter:
+    description: 'Linter to run: ruff, pycodestyle, or all'
+    required: false
+    default: 'ruff'
   exclude_paths:
     description: 'Paths excluded from style checks'
     required: false
@@ -22,17 +26,44 @@ runs:
   using: 'composite'
 
   steps:
-    - name: Run Pycodestyle
+    - name: Run Python Linters
       shell: bash
-      run: >-
+      run: |
         if [[ ! -f "./Dockerfile" ]]; then
-          pip install pycodestyle
-          pycodestyle ${{ inputs.app_name }}/ --exclude=${{ inputs.exclude_paths }}
+          linter="${{ inputs.linter }}"
+          linter="${linter,,}"
+
+          ruff_args=(check "${{ inputs.app_name }}/")
+          pycodestyle_args=("${{ inputs.app_name }}/")
+          if [[ -n "${{ inputs.exclude_paths }}" ]]; then
+            ruff_args+=(--exclude "${{ inputs.exclude_paths }}")
+            pycodestyle_args+=(--exclude="${{ inputs.exclude_paths }}")
+          fi
+
+          case "$linter" in
+            ruff)
+              pip install ruff
+              ruff "${ruff_args[@]}"
+              ;;
+            pycodestyle)
+              pip install pycodestyle
+              pycodestyle "${pycodestyle_args[@]}"
+              ;;
+            all)
+              pip install ruff pycodestyle
+              ruff "${ruff_args[@]}"
+              pycodestyle "${pycodestyle_args[@]}"
+              ;;
+            *)
+              echo "Invalid linter '${{ inputs.linter }}'. Valid options are: ruff, pycodestyle, all"
+              exit 1
+              ;;
+          esac
         fi
 
     - name: Check for License Headers
       shell: bash
-      run: >-
+      run: |
         if [[ -f "./LICENSE" ]]; then
           LICENSE_ERR=$(find ${{ inputs.app_name }} -type f -size +0 -not -path "*/migrations/*" -name "*.py"\
             -exec grep -PzL "# Copyright $(date +'%Y') ${{ inputs.copyright_owner }}\n# SPDX-License-Identifier: ${{ inputs.license }}" {} \;)
