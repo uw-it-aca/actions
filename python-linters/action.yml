@@ -29,37 +29,35 @@ runs:
     - name: Run Python Linters
       shell: bash
       run: |
-        if [[ ! -f "./Dockerfile" ]]; then
-          linter="${{ inputs.linter }}"
-          linter="${linter,,}"
+        linter="${{ inputs.linter }}"
+        linter="${linter,,}"
 
-          ruff_args=(check "${{ inputs.app_name }}/")
-          pycodestyle_args=("${{ inputs.app_name }}/")
-          if [[ -n "${{ inputs.exclude_paths }}" ]]; then
-            ruff_args+=(--exclude "${{ inputs.exclude_paths }}")
-            pycodestyle_args+=(--exclude="${{ inputs.exclude_paths }}")
-          fi
-
-          case "$linter" in
-            ruff)
-              pip install ruff
-              ruff "${ruff_args[@]}"
-              ;;
-            pycodestyle)
-              pip install pycodestyle
-              pycodestyle "${pycodestyle_args[@]}"
-              ;;
-            all)
-              pip install ruff pycodestyle
-              ruff "${ruff_args[@]}"
-              pycodestyle "${pycodestyle_args[@]}"
-              ;;
-            *)
-              echo "Invalid linter '${{ inputs.linter }}'. Valid options are: ruff, pycodestyle, all"
-              exit 1
-              ;;
-          esac
+        ruff_args=(check "${{ inputs.app_name }}/")
+        pycodestyle_args=("${{ inputs.app_name }}/")
+        if [[ -n "${{ inputs.exclude_paths }}" ]]; then
+          ruff_args+=(--exclude "${{ inputs.exclude_paths }}")
+          pycodestyle_args+=(--exclude="${{ inputs.exclude_paths }}")
         fi
+
+        case "$linter" in
+          ruff)
+            pip install ruff
+            ruff "${ruff_args[@]}"
+            ;;
+          pycodestyle)
+            pip install pycodestyle
+            pycodestyle "${pycodestyle_args[@]}"
+            ;;
+          all)
+            pip install ruff pycodestyle
+            ruff "${ruff_args[@]}"
+            pycodestyle "${pycodestyle_args[@]}"
+            ;;
+          *)
+            echo "Invalid linter '${{ inputs.linter }}'. Valid options are: ruff, pycodestyle, all"
+            exit 1
+            ;;
+        esac
 
     - name: Check for License Headers
       shell: bash
