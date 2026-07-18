@@ -6,7 +6,7 @@ inputs:
   app_name:
     required: true
   linter:
-    description: 'Linter to run: ruff, pycodestyle, or all'
+    description: 'Linter to run: ruff, pycodestyle, all, or disabled'
     required: false
     default: 'ruff'
   exclude_paths:
@@ -53,8 +53,11 @@ runs:
             ruff "${ruff_args[@]}"
             pycodestyle "${pycodestyle_args[@]}"
             ;;
+          disabled)
+            echo "Linting disabled (linter=disabled)."
+            ;;
           *)
-            echo "Invalid linter '${{ inputs.linter }}'. Valid options are: ruff, pycodestyle, all"
+            echo "Invalid linter '${{ inputs.linter }}'. Valid options are: ruff, pycodestyle, all, disabled"
             exit 1
             ;;
         esac
