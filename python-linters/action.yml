@@ -13,6 +13,10 @@ inputs:
     description: 'Paths excluded from style checks'
     required: false
     default: ''
+  ignore:
+    description: 'Comma-separated list of linter rule codes to ignore'
+    required: false
+    default: ''
   license:
     description: 'License to check'
     required: false
@@ -37,6 +41,13 @@ runs:
         if [[ -n "${{ inputs.exclude_paths }}" ]]; then
           ruff_args+=(--exclude "${{ inputs.exclude_paths }}")
           pycodestyle_args+=(--exclude="${{ inputs.exclude_paths }}")
+        fi
+
+        ignore_rules="${{ inputs.ignore }}"
+        ignore_rules="${ignore_rules//[[:space:]]/}"
+        if [[ -n "$ignore_rules" ]]; then
+          ruff_args+=(--ignore "$ignore_rules")
+          pycodestyle_args+=(--ignore="$ignore_rules")
         fi
 
         case "$linter" in
