@@ -12,22 +12,6 @@ inputs:
   gcp_json_key:
     description: 'Authentication key for GCP access'
     required: true
-  registry_user:
-    description: 'Username for registry authentication'
-    default: '_json_key'
-    required: false
-  registry_project_id:
-    description: 'GCP project containing registry'
-    required: false
-    default: 'uwit-mci-axdd'
-  registry_hostname:
-    description: 'Registry hostname'
-    required: false
-    default: 'us-docker.pkg.dev'
-  registry_path:
-    description: 'Registry path'
-    required: false
-    default: 'containers'
 
 outputs:
   promoted:
@@ -51,7 +35,7 @@ runs:
       run: |
         echo "${{ inputs.gcp_json_key }}" |
           base64 -d |
-          docker login --username=${{ inputs.registry_user }} --password-stdin https://${{ inputs.registry_hostname }}
+          docker login --username=_json_key --password-stdin https://us-docker.pkg.dev
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v4
@@ -63,11 +47,7 @@ runs:
         function registry_ref {
           IMAGE_RELEASE_NAME=$(echo "$1" | cut -d: -f 1)
           IMAGE_RELEASE_TAG=$(echo "$1" | cut -d: -f 2)
-          IMAGE_REG_PATH_PARTS=(${{ inputs.registry_project_id }}
-                                ${{ inputs.registry_path }}
-                                ${IMAGE_RELEASE_NAME})
-          IMAGE_REG_PATH=$(IFS=/; echo "${IMAGE_REG_PATH_PARTS[*]}")
-          echo "${{ inputs.registry_hostname }}/${IMAGE_REG_PATH}:${IMAGE_RELEASE_TAG}"
+          echo "us-docker.pkg.dev/uwit-mci-axdd/containers/${IMAGE_RELEASE_NAME}:${IMAGE_RELEASE_TAG}"
         }
 
         TARGET_REF=$(registry_ref "${{ inputs.image_tag }}")
