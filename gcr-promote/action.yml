@@ -1,0 +1,64 @@
+name: 'Google Cloud Registry or Artifact Registry Promote'
+
+description: 'Alias a previously-pushed content-addressed candidate image onto a commit tag without rebuilding'
+
+inputs:
+  image_tag:
+    description: 'Target image tag to create (e.g. release:commit_hash)'
+    required: true
+  content_image_tag:
+    description: 'Candidate image tag to promote from (e.g. release:content-<hash>)'
+    required: true
+  gcp_json_key:
+    description: 'Authentication key for GCP access'
+    required: true
+
+outputs:
+  promoted:
+    description: 'Whether a matching candidate was found and promoted (true/false)'
+    value: ${{ steps.promote.outputs.promoted }}
+
+runs:
+  using: 'composite'
+
+  steps:
+    - name: Verify GCP credentials
+      shell: bash
+      run: |
+        if [[ -z "${{ inputs.gcp_json_key }}" ]]; then
+          echo "Missing GCP credentials"
+          exit 1
+        fi
+
+    - name: Docker login with GCP credentials
+      shell: bash
+      run: |
+        echo "${{ inputs.gcp_json_key }}" |
+          base64 -d |
+          docker login --username=_json_key --password-stdin https://us-docker.pkg.dev
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v4
+
+    - name: Promote candidate if found
+      id: promote
+      shell: bash
+      run: |
+        function registry_ref {
+          IMAGE_RELEASE_NAME=$(echo "$1" | cut -d: -f 1)
+          IMAGE_RELEASE_TAG=$(echo "$1" | cut -d: -f 2)
+          echo "us-docker.pkg.dev/uwit-mci-axdd/containers/${IMAGE_RELEASE_NAME}:${IMAGE_RELEASE_TAG}"
+        }
+
+        TARGET_REF=$(registry_ref "${{ inputs.image_tag }}")
+        CANDIDATE_REF=$(registry_ref "${{ inputs.content_image_tag }}")
+
+        echo "Looking for candidate $CANDIDATE_REF"
+        if docker buildx imagetools inspect "$CANDIDATE_REF" >/dev/null 2>&1; then
+          echo "Found candidate, promoting to $TARGET_REF"
+          docker buildx imagetools create --tag "$TARGET_REF" "$CANDIDATE_REF"
+          echo "promoted=true" >> $GITHUB_OUTPUT
+        else
+          echo "No candidate found for $CANDIDATE_REF, falling through to full build"
+          echo "promoted=false" >> $GITHUB_OUTPUT
+        fi

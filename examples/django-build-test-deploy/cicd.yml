@@ -53,6 +53,8 @@ jobs:
       commit_hash: ${{ steps.context.outputs.commit_hash }}
       git_repo_branch: ${{ steps.context.outputs.git_repo_branch }}
       image_tag: ${{ steps.context.outputs.image_tag }}
+      content_tag: ${{ steps.context.outputs.content_tag }}
+      content_image_tag: ${{ steps.context.outputs.content_image_tag }}
 
     steps:
       - name: Set up Context
@@ -61,10 +63,41 @@ jobs:
         with:
           release_name: ${{ env.RELEASE_NAME }}
 
+  # Merge promotes an already-tested candidate image instead of rebuilding
+  # it; see docs/proposals/build-once-promote-on-merge.md. Only meaningful
+  # on push - on pull_request this job doesn't run, so
+  # needs.promote.outputs.promoted is empty and the build job below runs
+  # exactly as it did before this was added.
+  promote:
+    runs-on: ubuntu-24.04
+
+    if: github.event_name == 'push'
+
+    needs: context
+
+    outputs:
+      promoted: ${{ steps.promote.outputs.promoted }}
+
+    steps:
+      - name: Promote candidate image if one exists
+        id: promote
+        uses: uw-it-aca/actions/gcr-promote@main
+        with:
+          image_tag: ${{ needs.context.outputs.image_tag }}
+          content_image_tag: ${{ needs.context.outputs.content_image_tag }}
+          gcp_json_key: ${{ secrets.GCP_JSON_KEY }}
+
   build:
     runs-on: ubuntu-24.04
 
-    needs: context
+    # Runs whenever promote didn't already ship this exact content -
+    # skipped entirely on a successful promotion. !failure() && !cancelled()
+    # (rather than the implicit default) is needed because promote is
+    # itself skipped on pull_request events, and a skipped dependency
+    # would otherwise skip this job too.
+    if: ${{ !failure() && !cancelled() && needs.promote.outputs.promoted != 'true' }}
+
+    needs: [context, promote]
 
     permissions:
       contents: read
@@ -77,6 +110,8 @@ jobs:
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -100,13 +135,17 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
 
-        # Build App Image
+        # Build App Image (tagged both by commit and by content, so
+        # either a PR candidate push or a merge fallback push can use
+        # the same local image without rebuilding)
       - name: Build App Image
         uses: docker/build-push-action@v7
         with:
           context: .
           target: app-container
-          tags: ${{ needs.context.outputs.image_tag }}
+          tags: |
+            ${{ needs.context.outputs.image_tag }}
+            ${{ needs.context.outputs.content_image_tag }}
           push: false
           load: true
           cache-from: type=local,src=/tmp/.buildx-cache
@@ -191,17 +230,25 @@ jobs:
           cat ${{ steps.vuln-scan.outputs.results_file }}
           exit 1
 
+      # gcr-push decides what to push from the triggering event: a
+      # same-repo pull_request pushes the content-tagged candidate (so a
+      # later merge can promote it instead of rebuilding); a push pushes
+      # image_tag plus the content tag as an additional_tag, since this job
+      # only runs at all when promote didn't already ship the image.
       - name: Push Image to Repository
-        if: github.event_name == 'push'
         uses: uw-it-aca/actions/gcr-push@main
         with:
           image_tag: ${{ needs.context.outputs.image_tag }}
+          content_image_tag: ${{ needs.context.outputs.content_image_tag }}
+          additional_tags: ${{ needs.context.outputs.content_tag }}
           gcp_json_key: ${{ secrets.GCP_JSON_KEY }}
 
   deploy:
-    if: github.event_name == 'push'
+    # !failure() && !cancelled(): build is legitimately skipped whenever
+    # promote shipped the image already, and that must not skip deploy too.
+    if: ${{ !failure() && !cancelled() && github.event_name == 'push' }}
 
-    needs: [context, build]
+    needs: [context, promote, build]
 
     outputs:
       context: ${{ steps.context.outputs.context }}
@@ -239,9 +286,11 @@ jobs:
         run: echo "context=$(< ${CONTEXT_FILENAME})" >> $GITHUB_OUTPUT
 
   housekeeping:
-    if: github.event_name == 'push'
+    # !failure() && !cancelled(): same reasoning as deploy - build may be
+    # legitimately skipped, that alone must not skip housekeeping too.
+    if: ${{ !failure() && !cancelled() && github.event_name == 'push' }}
 
-    needs: [context, build, deploy]
+    needs: [context, promote, build, deploy]
 
     runs-on: ubuntu-24.04
 
