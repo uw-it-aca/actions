@@ -6,6 +6,10 @@ inputs:
   image_tag:
     description: 'Image tag to push to Registry'
     required: true
+  additional_tags:
+    description: 'Comma-separated bare tags to also push from the same local image'
+    required: false
+    default: ''
   gcp_json_key:
     description: 'Authentication key for GCP access'
     required: true
@@ -39,6 +43,9 @@ outputs:
   image_registry_tagged:
     description: 'Docker image registry name, tagged'
     value: ${{ steps.reg-tag.outputs.image_registry_tagged }}
+  additional_image_registry_tagged:
+    description: 'Comma-separated additional docker image registry names, tagged'
+    value: ${{ steps.reg-tag.outputs.additional_image_registry_tagged }}
 
 runs:
   using: 'composite'
@@ -80,9 +87,26 @@ runs:
         echo "image_registry=$IMAGE_REG" >> $GITHUB_OUTPUT
         echo "image_registry_tagged=$IMAGE_REG_TAG" >> $GITHUB_OUTPUT
 
+        ADDITIONAL_REG_TAGS=""
+        IFS=',' read -ra ADDITIONAL_TAGS <<< "${{ inputs.additional_tags }}"
+        for tag in "${ADDITIONAL_TAGS[@]}"; do
+          [[ -z "$tag" ]] && continue
+          ADDITIONAL_REG_TAG="${IMAGE_REG}:${tag}"
+          docker tag "${{ inputs.image_tag }}" "$ADDITIONAL_REG_TAG"
+          ADDITIONAL_REG_TAGS="${ADDITIONAL_REG_TAGS:+${ADDITIONAL_REG_TAGS},}${ADDITIONAL_REG_TAG}"
+        done
+        echo "additional_image_registry_tagged=$ADDITIONAL_REG_TAGS" >> $GITHUB_OUTPUT
+
     - name: Push Image to Registry
       id: reg-push
       shell: bash
       run: |
         docker push "${{ steps.reg-tag.outputs.image_registry_tagged }}"
         echo "pushed ${{ steps.reg-tag.outputs.image_registry_tagged }}"
+
+        IFS=',' read -ra ADDITIONAL_REG_TAGS <<< "${{ steps.reg-tag.outputs.additional_image_registry_tagged }}"
+        for tagged in "${ADDITIONAL_REG_TAGS[@]}"; do
+          [[ -z "$tagged" ]] && continue
+          docker push "$tagged"
+          echo "pushed $tagged"
+        done

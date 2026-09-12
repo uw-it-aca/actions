@@ -53,6 +53,8 @@ jobs:
       commit_hash: ${{ steps.context.outputs.commit_hash }}
       git_repo_branch: ${{ steps.context.outputs.git_repo_branch }}
       image_tag: ${{ steps.context.outputs.image_tag }}
+      content_tag: ${{ steps.context.outputs.content_tag }}
+      content_image_tag: ${{ steps.context.outputs.content_image_tag }}
 
     steps:
       - name: Set up Context
@@ -75,24 +77,46 @@ jobs:
       # checks: write          # For check runs
 
     steps:
+      # Merge promotes an already-tested candidate image instead of
+      # rebuilding it; see docs/proposals/build-once-promote-on-merge.md.
+      # Only meaningful on push (the event that can actually ship an
+      # image) - on pull_request this step doesn't run, so
+      # steps.promote.outputs.promoted stays empty and every step below
+      # runs exactly as it did before this was added.
+      - name: Promote candidate image if one exists
+        id: promote
+        if: github.event_name == 'push'
+        uses: uw-it-aca/actions/gcr-promote@main
+        with:
+          image_tag: ${{ needs.context.outputs.image_tag }}
+          content_image_tag: ${{ needs.context.outputs.content_image_tag }}
+          gcp_json_key: ${{ secrets.GCP_JSON_KEY }}
+
       - name: Checkout Repo
+        if: steps.promote.outputs.promoted != 'true'
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Python
+        if: steps.promote.outputs.promoted != 'true'
         uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
       - name: Run Python Linters
+        if: steps.promote.outputs.promoted != 'true'
         uses: uw-it-aca/actions/python-linters@main
         with:
           app_name: ${DJANGO_APP}
           exclude_paths: 'migrations'
 
       - name: Set up Docker Buildx
+        if: steps.promote.outputs.promoted != 'true'
         uses: docker/setup-buildx-action@v4
 
       - name: Cache Docker layers
+        if: steps.promote.outputs.promoted != 'true'
         uses: actions/cache@v5
         with:
           path: /tmp/.buildx-cache
@@ -100,13 +124,18 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
 
-        # Build App Image
+        # Build App Image (tagged both by commit and by content, so
+        # either a PR candidate push or a merge fallback push can use
+        # the same local image without rebuilding)
       - name: Build App Image
+        if: steps.promote.outputs.promoted != 'true'
         uses: docker/build-push-action@v7
         with:
           context: .
           target: app-container
-          tags: ${{ needs.context.outputs.image_tag }}
+          tags: |
+            ${{ needs.context.outputs.image_tag }}
+            ${{ needs.context.outputs.content_image_tag }}
           push: false
           load: true
           cache-from: type=local,src=/tmp/.buildx-cache
@@ -114,6 +143,7 @@ jobs:
 
       # Build Test Image
       - name: Build Test Image
+        if: steps.promote.outputs.promoted != 'true'
         uses: docker/build-push-action@v7
         with:
           target: app-test-container
@@ -124,6 +154,7 @@ jobs:
       # Run Python Tests
       - name: Run Tests in Image
         id: tests
+        if: steps.promote.outputs.promoted != 'true'
         shell: bash
         run: >-
           docker run --rm -u root -t
@@ -135,6 +166,7 @@ jobs:
 
       # Run Python Coverage and Upload to Coveralls
       - name: Run Python Coverage and Upload to Coveralls
+        if: steps.promote.outputs.promoted != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -177,6 +209,7 @@ jobs:
 
       - name: Run vulnerability scan
         id: vuln-scan
+        if: steps.promote.outputs.promoted != 'true'
         uses: uw-it-aca/actions/container-vuln-scan@main
         with:
           image_tag: ${{ needs.context.outputs.image_tag }}
@@ -184,18 +217,36 @@ jobs:
 
       - name: Fail on vulnerabilities (optional step)
         # Remove this entire block if you don't want to fail the build
-        if: steps.vuln-scan.outputs.vulnerabilities_found == 'true'
+        if: steps.promote.outputs.promoted != 'true' && steps.vuln-scan.outputs.vulnerabilities_found == 'true'
         shell: bash
         run: |
           echo "High or critical vulnerabilities found!"
           cat ${{ steps.vuln-scan.outputs.results_file }}
           exit 1
 
+      # Push the candidate under its content tag so a later merge can
+      # promote it instead of rebuilding. Restricted to same-repo PRs -
+      # pull_request runs from a fork don't get repo secrets, so without
+      # this guard a fork PR's build would fail verifying GCP credentials
+      # instead of just skipping the push as it always has.
+      - name: Push Candidate Image
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        uses: uw-it-aca/actions/gcr-push@main
+        with:
+          image_tag: ${{ needs.context.outputs.content_image_tag }}
+          gcp_json_key: ${{ secrets.GCP_JSON_KEY }}
+
+      # Fallback full-build push: only runs when no candidate was found to
+      # promote. Also pushes the content tag so this tree becomes
+      # promotable for any future commit that lands with identical content.
       - name: Push Image to Repository
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && steps.promote.outputs.promoted != 'true'
         uses: uw-it-aca/actions/gcr-push@main
         with:
           image_tag: ${{ needs.context.outputs.image_tag }}
+          additional_tags: ${{ needs.context.outputs.content_tag }}
           gcp_json_key: ${{ secrets.GCP_JSON_KEY }}
 
   deploy:
