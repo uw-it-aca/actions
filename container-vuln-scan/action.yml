@@ -21,6 +21,14 @@ inputs:
     description: 'Path to Trivy ignore file (defaults to .trivyignore.yaml if it exists)'
     required: false
     default: ''
+  category:
+    description: >-
+      Explicit code-scanning category, so this stays one analysis stream
+      regardless of which job uploads it - matters for promote-reports,
+      which re-uploads this same scan from the promote job on a promoted
+      merge. Must match the category passed there if overridden.
+    required: false
+    default: 'trivy'
 
 outputs:
   vulnerabilities_found:
@@ -158,3 +166,4 @@ runs:
       if: success() && inputs.upload_results == 'true' && hashFiles('trivy-results.sarif') != ''
       with:
         sarif_file: 'trivy-results.sarif'
+        category: ${{ inputs.category }}

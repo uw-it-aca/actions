@@ -11,6 +11,13 @@ inputs:
   github_token:
     description: 'Token with actions:read and security-events:write'
     required: true
+  category:
+    description: >-
+      Must match the category passed to container-vuln-scan (default
+      'trivy') so this is treated as the same analysis stream instead of
+      a separate code-scanning configuration that PRs never populate.
+    required: false
+    default: 'trivy'
 
 outputs:
   found:
@@ -78,3 +85,4 @@ runs:
         sha: ${{ github.sha }}
         ref: ${{ github.ref }}
         token: ${{ inputs.github_token }}
+        category: ${{ inputs.category }}
