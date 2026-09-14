@@ -104,6 +104,8 @@ jobs:
         with:
           content_tag: ${{ needs.context.outputs.content_tag }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          # Must match container-vuln-scan's category below exactly.
+          category: 'trivy'
 
   build:
     runs-on: ubuntu-24.04
@@ -238,6 +240,8 @@ jobs:
         with:
           image_tag: ${{ needs.context.outputs.image_tag }}
           severity: 'HIGH,CRITICAL'
+          # Must match promote-reports' category above exactly.
+          category: 'trivy'
 
       - name: Fail on vulnerabilities (optional step)
         # Remove this entire block if you don't want to fail the build
