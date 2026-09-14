@@ -61,7 +61,13 @@ runs:
 
         cp reports/.coverage* .
         python -m pip install --upgrade pip coverage coveralls==3.3.1
-        coverage combine
+
+        # The preserved .coverage is already the combined output of the
+        # original PR run's own "coverage combine" - only re-combine here
+        # if somehow-uncombined parallel .coverage.* files came along too.
+        if compgen -G ".coverage.*" > /dev/null; then
+          coverage combine
+        fi
         coveralls
 
     - name: Reupload vulnerability scan for this commit
