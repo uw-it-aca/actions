@@ -21,6 +21,16 @@ inputs:
     description: 'Path to Trivy ignore file (defaults to .trivyignore.yaml if it exists)'
     required: false
     default: ''
+  category:
+    description: >-
+      Explicit code-scanning category. Leave unset (default) to preserve
+      today's auto-derived category, unchanged - only set this if also
+      pairing with promote-reports, and only ever to the exact same value
+      passed there, so both stay one analysis stream regardless of which
+      job uploads it. Setting this changes the category identity for this
+      repo going forward, orphaning whatever category was used before.
+    required: false
+    default: ''
 
 outputs:
   vulnerabilities_found:
@@ -155,6 +165,17 @@ runs:
       
     - name: Upload Trivy results to GitHub Security
       uses: github/codeql-action/upload-sarif@v4
-      if: success() && inputs.upload_results == 'true' && hashFiles('trivy-results.sarif') != ''
+      if: >-
+        success() && inputs.upload_results == 'true' &&
+        hashFiles('trivy-results.sarif') != '' && inputs.category == ''
       with:
         sarif_file: 'trivy-results.sarif'
+
+    - name: Upload Trivy results to GitHub Security (explicit category)
+      uses: github/codeql-action/upload-sarif@v4
+      if: >-
+        success() && inputs.upload_results == 'true' &&
+        hashFiles('trivy-results.sarif') != '' && inputs.category != ''
+      with:
+        sarif_file: 'trivy-results.sarif'
+        category: ${{ inputs.category }}
