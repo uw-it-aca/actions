@@ -47,9 +47,13 @@ inputs:
     required: false
     default: 'uwit-mci-0011'
   gcp_production_flux_instance:
-    description: 'GCP flux deployment instance (e.g., "prod", "dev")'
+    description: 'GCP production flux deployment instance (e.g., "prod")'
     required: false
     default: 'prod'
+  gcp_development_flux_instance:
+    description: 'GCP flux develop deployment instance (e.g., "dev")'
+    required: false
+    default: 'dev'
   gcp_development_project:
     description: 'GCP project intended for development deployments'
     required: false
@@ -156,7 +160,7 @@ runs:
               ;;
           *)
               APP_INSTANCE="${{ inputs.app_instance }}"
-              FLUX_INSTANCE="dev"
+              FLUX_INSTANCE="${{ inputs.gcp_development_flux_instance }}"
               GCP_PROJECT="${{ inputs.gcp_development_project }}"
               FLUX_RELEASE_SUFFIX=""
               if [ $APP_INSTANCE != "test" ]; then
@@ -202,9 +206,9 @@ runs:
         echo "${JSON_CONTEXT}" > ${{ inputs.context_filename }}
         echo "::endgroup::"
 
-        echo "#####################################"
-        echo "DEPLOY $APP_NAME in ${GCP_PROJECT}"
-        echo "#####################################"
+        echo "####################################################"
+        echo "DEPLOY $APP_NAME in ${GCP_PROJECT} (${FLUX_REPO_NAME})"
+        echo "####################################################"
 
     - name: Clone Helm Chart
       id: helm_clone
