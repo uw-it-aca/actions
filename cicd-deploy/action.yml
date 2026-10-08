@@ -165,6 +165,10 @@ runs:
               FLUX_RELEASE_SUFFIX=""
               if [ $APP_INSTANCE != "test" ]; then
                 FLUX_RELEASE_SUFFIX="-${APP_INSTANCE}"
+              else
+                if [ $FLUX_INSTANCE != "dev" ]; then
+                  FLUX_RELEASE_SUFFIX="-test"
+                fi
               fi
               ;;
         esac
