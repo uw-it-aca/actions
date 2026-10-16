@@ -70,6 +70,13 @@ inputs:
     description: 'Flux default branch name (e.g., "master", "main")'
     required: false
     default: master
+  flux_manifest_path:
+    description: >-
+      Path of the release manifest within the flux repository (e.g.,
+      "deploy/app.yaml"). Defaults to
+      "releases/<flux instance>/<release name>.yaml".
+    required: false
+    default: ''
   helm_chart_branch:
     description: 'Helm chart repository branch at the base of release'
     required: false
@@ -193,7 +200,7 @@ runs:
         set_context flux_repo_path           "${FLUX_REPO_OWNER}/$FLUX_REPO_NAME"
         set_context flux_release_branch      "release/${FLUX_INSTANCE}/${FLUX_BASE_NAME}"
         set_context flux_release_branch_name "${FLUX_RELEASE_BRANCH}/${COMMIT_HASH}"
-        set_context flux_release_manifest    "releases/${FLUX_INSTANCE}/$MANIFEST_FILE_NAME"
+        set_context flux_release_manifest    "$([ -n "${{ inputs.flux_manifest_path }}" ] && echo "${{ inputs.flux_manifest_path }}" || echo "releases/${FLUX_INSTANCE}/${MANIFEST_FILE_NAME}")"
         set_context flux_local_dir           "${PWD}/$FLUX_REPO_NAME"
         set_context flux_pr_output           "${PWD}/pr-${FLUX_INSTANCE}-${FULL_RELEASE_NAME}-${COMMIT_HASH}.json"
         set_context flux_merge_output        "${PWD}/merge-${FLUX_INSTANCE}-${FULL_RELEASE_NAME}-${COMMIT_HASH}.json"
@@ -302,6 +309,7 @@ runs:
 
         cd $FLUX_LOCAL_DIR
         git checkout -b ${FLUX_RELEASE_BRANCH_NAME}
+        mkdir -p "$(dirname ${FLUX_RELEASE_MANIFEST})"
         cp -p ${LOCAL_MANIFEST} ${FLUX_RELEASE_MANIFEST}
         git add ${FLUX_RELEASE_MANIFEST}
         git status
