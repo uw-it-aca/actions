@@ -123,6 +123,7 @@ runs:
           fi
 
           echo "Using security-severity threshold: >= ${severity_threshold}"
+          echo "severity_threshold=${severity_threshold}" >> $GITHUB_OUTPUT
 
           # security-severity lives on tool.driver.rules[], not results[]
           raw_count=$(jq --argjson threshold "$severity_threshold" '
@@ -153,6 +154,50 @@ runs:
           echo "vulnerabilities_found=false" >> $GITHUB_OUTPUT
         fi
       
+    - name: Summarize vulnerabilities
+      if: success() && steps.scan-results.outputs.vulnerabilities_found == 'true'
+      shell: bash
+      env:
+        THRESHOLD: ${{ steps.scan-results.outputs.severity_threshold }}
+        IMAGE_TAG: ${{ inputs.image_tag }}
+      run: |
+        # Rows: score, CVE id, package, installed, fixed. Package details are
+        # parsed from the Trivy result message text.
+        rows=$(jq -r --argjson threshold "$THRESHOLD" '
+          .runs[]?
+          | (reduce (.tool.driver.rules[]?) as $r ({}; .[$r.id] = $r)) as $rules
+          | .results[]?
+          | . as $res
+          | ($rules[$res.ruleId].properties."security-severity" // "0" | tonumber) as $score
+          | select($score >= $threshold)
+          | ($res.message.text // "") as $msg
+          | [
+              $score,
+              $res.ruleId,
+              ($msg | capture("Package: (?<v>[^\\n]+)").v // "-"),
+              ($msg | capture("Installed Version: (?<v>[^\\n]+)").v // "-"),
+              ($msg | capture("Fixed Version: (?<v>[^\\n]+)").v // "-")
+            ]
+          | @tsv
+        ' trivy-results.sarif 2>/dev/null | sort -t$'\t' -k1,1nr -u)
+
+        [[ -z "$rows" ]] && exit 0
+
+        # Same row can repeat once per affected target; -u above collapses
+        # exact duplicates.
+        echo "Vulnerabilities in ${IMAGE_TAG} (security-severity >= ${THRESHOLD}):"
+        echo "$rows" | column -t -s$'\t'
+
+        if [[ -n "$GITHUB_STEP_SUMMARY" ]]; then
+          {
+            echo "### Container vulnerabilities: \`${IMAGE_TAG}\`"
+            echo
+            echo "| Score | ID | Package | Installed | Fixed |"
+            echo "|---|---|---|---|---|"
+            echo "$rows" | awk -F'\t' '{ printf "| %s | %s | %s | %s | %s |\n", $1, $2, $3, $4, $5 }'
+          } >> "$GITHUB_STEP_SUMMARY"
+        fi
+
     - name: Upload Trivy results to GitHub Security
       uses: github/codeql-action/upload-sarif@v4
       if: success() && inputs.upload_results == 'true' && hashFiles('trivy-results.sarif') != ''
