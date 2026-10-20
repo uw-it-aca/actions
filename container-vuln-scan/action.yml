@@ -17,6 +17,14 @@ inputs:
     description: 'Whether to upload results to GitHub Security tab'
     required: false
     default: 'true'
+  upload_artifact:
+    description: 'Whether to upload the sarif results file as a workflow run artifact'
+    required: false
+    default: 'true'
+  artifact_name:
+    description: 'Name of the uploaded results artifact (must be unique within a workflow run)'
+    required: false
+    default: 'trivy-results'
   ignorefile:
     description: 'Path to Trivy ignore file (defaults to .trivyignore.yaml if it exists)'
     required: false
@@ -197,6 +205,13 @@ runs:
             echo "$rows" | awk -F'\t' '{ printf "| %s | %s | %s | %s | %s |\n", $1, $2, $3, $4, $5 }'
           } >> "$GITHUB_STEP_SUMMARY"
         fi
+
+    - name: Upload Trivy results as artifact
+      uses: actions/upload-artifact@v7
+      if: always() && inputs.upload_artifact == 'true' && hashFiles('trivy-results.sarif') != ''
+      with:
+        name: ${{ inputs.artifact_name }}
+        path: 'trivy-results.sarif'
 
     - name: Upload Trivy results to GitHub Security
       uses: github/codeql-action/upload-sarif@v4
