@@ -103,7 +103,7 @@ runs:
         echo "::add-mask::${{ inputs.gh_auth_token }}"
 
         echo "Clone ${FLUX_REPO_PATH} repository"
-        git clone https://${{ inputs.gh_auth_token }}@github.com/${FLUX_REPO_PATH}.git --branch ${FLUX_REPO_DEFAULT_BRANCH} $FLUX_LOCAL_DIR
+        git clone https://x-access-token:${{ inputs.gh_auth_token }}@github.com/${FLUX_REPO_PATH}.git --branch ${FLUX_REPO_DEFAULT_BRANCH} $FLUX_LOCAL_DIR
         cd $FLUX_LOCAL_DIR
 
         echo "Gather stale branches"
