@@ -6,6 +6,21 @@ inputs:
   image_tag:
     description: 'Image tag to push to Registry'
     required: true
+  content_image_tag:
+    description: >-
+      Content-addressed candidate tag (build-once-promote-on-merge). When
+      set, this action decides what to push based on the triggering event
+      instead of always pushing image_tag: a same-repo pull_request pushes
+      content_image_tag (skipped entirely on a fork pull_request, since
+      those runs have no repo secrets); a push pushes image_tag (plus
+      additional_tags, if given); any other event is skipped. Leave unset
+      for a plain, unconditional push of image_tag - today's behavior.
+    required: false
+    default: ''
+  additional_tags:
+    description: 'Comma-separated bare tags to also push from the same local image'
+    required: false
+    default: ''
   gcp_json_key:
     description: 'Authentication key for GCP access'
     required: true
@@ -39,12 +54,51 @@ outputs:
   image_registry_tagged:
     description: 'Docker image registry name, tagged'
     value: ${{ steps.reg-tag.outputs.image_registry_tagged }}
+  additional_image_registry_tagged:
+    description: 'Comma-separated additional docker image registry names, tagged'
+    value: ${{ steps.reg-tag.outputs.additional_image_registry_tagged }}
 
 runs:
   using: 'composite'
 
   steps:
+    - name: Determine what to push
+      id: decide
+      shell: bash
+      run: |
+        if [[ -z "${{ inputs.content_image_tag }}" ]]; then
+          # Plain mode: unconditional push of image_tag, unchanged from
+          # before content_image_tag existed.
+          echo "skip=false" >> $GITHUB_OUTPUT
+          echo "effective_image_tag=${{ inputs.image_tag }}" >> $GITHUB_OUTPUT
+          echo "effective_additional_tags=${{ inputs.additional_tags }}" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        case "${{ github.event_name }}" in
+          pull_request)
+            if [[ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]]; then
+              echo "Skipping candidate push for fork pull_request (no repo secrets on this run)"
+              echo "skip=true" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "effective_image_tag=${{ inputs.content_image_tag }}" >> $GITHUB_OUTPUT
+            echo "effective_additional_tags=" >> $GITHUB_OUTPUT
+            ;;
+          push)
+            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "effective_image_tag=${{ inputs.image_tag }}" >> $GITHUB_OUTPUT
+            echo "effective_additional_tags=${{ inputs.additional_tags }}" >> $GITHUB_OUTPUT
+            ;;
+          *)
+            echo "Skipping push for event ${{ github.event_name }}"
+            echo "skip=true" >> $GITHUB_OUTPUT
+            ;;
+        esac
+
     - name: Verify GCP credentials
+      if: steps.decide.outputs.skip != 'true'
       shell: bash
       run: |
         if [[ -z "${{ inputs.gcp_json_key }}" ]]; then
@@ -54,6 +108,7 @@ runs:
 
     - name: Docker login with GCP credentials
       id: gcp-login
+      if: steps.decide.outputs.skip != 'true'
       shell: bash
       run: |
         echo "${{ inputs.gcp_json_key }}" |
@@ -62,10 +117,12 @@ runs:
 
     - name: Tag Image for Registry
       id: reg-tag
+      if: steps.decide.outputs.skip != 'true'
       shell: bash
       run: |
-        IMAGE_RELEASE_NAME=$(echo ${{ inputs.image_tag }} | cut -d: -f 1)
-        IMAGE_RELEASE_TAG=$(echo ${{ inputs.image_tag }} | cut -d: -f 2)
+        EFFECTIVE_IMAGE_TAG="${{ steps.decide.outputs.effective_image_tag }}"
+        IMAGE_RELEASE_NAME=$(echo "$EFFECTIVE_IMAGE_TAG" | cut -d: -f 1)
+        IMAGE_RELEASE_TAG=$(echo "$EFFECTIVE_IMAGE_TAG" | cut -d: -f 2)
         IMAGE_REG_PATH_PARTS=(${{ inputs.registry_project_id }}
                               ${{ inputs.registry_path }}
                               ${IMAGE_RELEASE_NAME})
@@ -73,16 +130,34 @@ runs:
         IMAGE_REG=${{ inputs.registry_hostname }}/${IMAGE_REG_PATH}
         IMAGE_REG_TAG=${IMAGE_REG}:${IMAGE_RELEASE_TAG}
 
-        docker tag "${{ inputs.image_tag }}" "$IMAGE_REG_TAG"
+        docker tag "$EFFECTIVE_IMAGE_TAG" "$IMAGE_REG_TAG"
 
         echo "image_registry_host=${{ inputs.registry_hostname }}" >> $GITHUB_OUTPUT
         echo "image_registry_path=$IMAGE_REG_PATH" >> $GITHUB_OUTPUT
         echo "image_registry=$IMAGE_REG" >> $GITHUB_OUTPUT
         echo "image_registry_tagged=$IMAGE_REG_TAG" >> $GITHUB_OUTPUT
 
+        ADDITIONAL_REG_TAGS=""
+        IFS=',' read -ra ADDITIONAL_TAGS <<< "${{ steps.decide.outputs.effective_additional_tags }}"
+        for tag in "${ADDITIONAL_TAGS[@]}"; do
+          [[ -z "$tag" ]] && continue
+          ADDITIONAL_REG_TAG="${IMAGE_REG}:${tag}"
+          docker tag "$EFFECTIVE_IMAGE_TAG" "$ADDITIONAL_REG_TAG"
+          ADDITIONAL_REG_TAGS="${ADDITIONAL_REG_TAGS:+${ADDITIONAL_REG_TAGS},}${ADDITIONAL_REG_TAG}"
+        done
+        echo "additional_image_registry_tagged=$ADDITIONAL_REG_TAGS" >> $GITHUB_OUTPUT
+
     - name: Push Image to Registry
       id: reg-push
+      if: steps.decide.outputs.skip != 'true'
       shell: bash
       run: |
         docker push "${{ steps.reg-tag.outputs.image_registry_tagged }}"
         echo "pushed ${{ steps.reg-tag.outputs.image_registry_tagged }}"
+
+        IFS=',' read -ra ADDITIONAL_REG_TAGS <<< "${{ steps.reg-tag.outputs.additional_image_registry_tagged }}"
+        for tagged in "${ADDITIONAL_REG_TAGS[@]}"; do
+          [[ -z "$tagged" ]] && continue
+          docker push "$tagged"
+          echo "pushed $tagged"
+        done

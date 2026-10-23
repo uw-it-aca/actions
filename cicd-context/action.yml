@@ -17,6 +17,10 @@ inputs:
     description: 'File path to project helm values files'
     required: false
     default: docker
+  extra_build_fingerprint:
+    description: 'Extra value folded into content_tag when build inputs vary independently of repo content (e.g. a conditional build-arg)'
+    required: false
+    default: ''
 
 outputs:
   commit_hash:
@@ -25,6 +29,12 @@ outputs:
   image_tag:
     description: "Docker image tag for deployment"
     value: ${{ steps.context.outputs.image_tag }}
+  content_tag:
+    description: "Docker image tag derived from git tree content, stable across re-builds of identical content"
+    value: ${{ steps.context.outputs.content_tag }}
+  content_image_tag:
+    description: "Docker image tag (release:content_tag) derived from git tree content"
+    value: ${{ steps.context.outputs.content_image_tag }}
   git_repo_branch:
     description: "Short Github repository branch name"
     value: ${{ steps.context.outputs.git_repo_branch }}
@@ -39,6 +49,11 @@ runs:
   using: 'composite'
 
   steps:
+    - name: Checkout Repo
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
     - name: CI/CD Context
       id: context
       shell: bash
@@ -60,6 +75,11 @@ runs:
         set_context image_tag        "${{ inputs.release_name }}:$COMMIT_HASH"
         set_context github_ref       "${{ github.ref }}"
         set_context git_repo_branch  "${GITHUB_REF#refs/heads/}"
+
+        TREE_HASH=$(git rev-parse HEAD^{tree})
+        CONTENT_HASH=$(echo -n "${TREE_HASH}${{ inputs.extra_build_fingerprint }}" | sha256sum | cut -c1-16)
+        set_context content_tag       "content-${CONTENT_HASH}"
+        set_context content_image_tag "${{ inputs.release_name }}:$CONTENT_TAG"
 
         #
         # The instance matrix is collected by sniffing at the project's helm

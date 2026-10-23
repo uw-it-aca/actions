@@ -1,0 +1,88 @@
+name: 'Promote PR Reports'
+
+description: >-
+  Reuse a promoted PR build's coverage and vulnerability-scan reports,
+  attributed to the merge commit, without re-running tests or a scan
+
+inputs:
+  content_tag:
+    description: 'Content tag identifying which PR build pushed the promoted candidate'
+    required: true
+  github_token:
+    description: 'Token with actions:read and security-events:write'
+    required: true
+  category:
+    description: >-
+      Must match the category passed to container-vuln-scan (default
+      'trivy') so this is treated as the same analysis stream instead of
+      a separate code-scanning configuration that PRs never populate.
+    required: false
+    default: 'trivy'
+
+outputs:
+  found:
+    description: 'Whether a matching reports artifact was found and reused (true/false)'
+    value: ${{ steps.find.outputs.found }}
+
+runs:
+  using: 'composite'
+
+  steps:
+    - name: Checkout Repo
+      uses: actions/checkout@v6
+
+    - name: Find and download reports artifact
+      id: find
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+      run: |
+        ARTIFACT_NAME="reports-${{ inputs.content_tag }}"
+        ARTIFACT_JSON=$(gh api "repos/${{ github.repository }}/actions/artifacts?name=${ARTIFACT_NAME}&per_page=1" --jq '.artifacts[0]')
+
+        if [[ -z "$ARTIFACT_JSON" || "$ARTIFACT_JSON" == "null" ]]; then
+          echo "No reports artifact named ${ARTIFACT_NAME} found; skipping report reuse"
+          echo "found=false" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        ARTIFACT_ID=$(echo "$ARTIFACT_JSON" | jq -r '.id')
+        echo "Downloading artifact ${ARTIFACT_NAME} (id ${ARTIFACT_ID})"
+        gh api "repos/${{ github.repository }}/actions/artifacts/${ARTIFACT_ID}/zip" > reports.zip
+        mkdir -p reports
+        unzip -o reports.zip -d reports
+        echo "found=true" >> $GITHUB_OUTPUT
+
+    - name: Resubmit coverage for this commit
+      if: steps.find.outputs.found == 'true'
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+      run: |
+        shopt -s nullglob
+        COVERAGE_FILES=(reports/.coverage*)
+        if [[ ${#COVERAGE_FILES[@]} -eq 0 ]]; then
+          echo "No .coverage data in reports artifact; skipping coverage resubmission"
+          exit 0
+        fi
+
+        cp reports/.coverage* .
+        python -m pip install --upgrade pip coverage coveralls==3.3.1
+
+        # The preserved .coverage is already the combined output of the
+        # original PR run's own "coverage combine" - only re-combine here
+        # if somehow-uncombined parallel .coverage.* files came along too.
+        if compgen -G ".coverage.*" > /dev/null; then
+          coverage combine
+        fi
+        coveralls
+
+    - name: Reupload vulnerability scan for this commit
+      if: steps.find.outputs.found == 'true' && hashFiles('reports/trivy-results.sarif') != ''
+      uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: reports/trivy-results.sarif
+        sha: ${{ github.sha }}
+        ref: ${{ github.ref }}
+        token: ${{ inputs.github_token }}
+        category: ${{ inputs.category }}
