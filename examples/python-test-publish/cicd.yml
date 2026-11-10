@@ -5,7 +5,7 @@
 #
 #  1) Application test suite is kicked off by APP_NAME/test.py
 #
-#  2) Application contains a setup.py file
+#  2) Application contains a pyproject.toml or setup.py file
 #
 #  3) Application repo has access to the required secret
 #     at https://github.com/organizations/uw-it-aca/settings/secrets:
