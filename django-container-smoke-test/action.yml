@@ -1,0 +1,129 @@
+name: 'Django Container Smoke Test'
+description: 'Validate and smoke-test a locally built Django container image'
+
+inputs:
+  image:
+    description: 'Name or tag of the locally available Docker image to test'
+    required: true
+  health-check-url:
+    description: 'HTTP URL to check from inside the container'
+    required: false
+    default: 'http://127.0.0.1:8000/'
+  startup-timeout-seconds:
+    description: 'Maximum seconds to wait for the health check to succeed'
+    required: false
+    default: '60'
+  additional-env:
+    description: 'Additional container environment variables, one KEY=VALUE assignment per line'
+    required: false
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Smoke-test image
+      shell: bash
+      env:
+        IMAGE: ${{ inputs.image }}
+        HEALTH_CHECK_URL: ${{ inputs.health-check-url }}
+        STARTUP_TIMEOUT_SECONDS: ${{ inputs.startup-timeout-seconds }}
+        ADDITIONAL_ENV: ${{ inputs.additional-env }}
+      run: |
+        set -euo pipefail
+
+        if [[ -z "$IMAGE" ]]; then
+          echo "image must name a locally available Docker image" >&2
+          exit 1
+        fi
+        if [[ -z "$HEALTH_CHECK_URL" ]]; then
+          echo "health-check-url must not be empty" >&2
+          exit 1
+        fi
+        if [[ ! "$STARTUP_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+          echo "startup-timeout-seconds must be a positive integer" >&2
+          exit 1
+        fi
+
+        declare -A environment=(
+          [ENV]=prod
+          [DB]=sqlite3
+          [PORT]=8000
+          [ALLOWED_HOSTS]=127.0.0.1,localhost
+          [CLUSTER_CNAME]=127.0.0.1
+          [SECRET_KEY]=ci-not-a-real-secret
+          [DJANGO_SECRET]=ci-not-a-real-secret
+        )
+
+        while IFS= read -r assignment || [[ -n "$assignment" ]]; do
+          [[ -z "$assignment" ]] && continue
+          if [[ "$assignment" != *=* ]]; then
+            echo "Invalid additional-env assignment; expected KEY=VALUE" >&2
+            exit 1
+          fi
+
+          key="${assignment%%=*}"
+          value="${assignment#*=}"
+          if [[ ! "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+            echo "Invalid environment variable name in additional-env: $key" >&2
+            exit 1
+          fi
+          environment["$key"]="$value"
+        done <<< "$ADDITIONAL_ENV"
+
+        docker_env=()
+        for key in "${!environment[@]}"; do
+          docker_env+=(--env "$key=${environment[$key]}")
+        done
+
+        name="django-smoke-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-${BASHPID}"
+        cleanup() {
+          if docker inspect "$name" >/dev/null 2>&1; then
+            docker logs "$name" || true
+            docker rm -f "$name" >/dev/null 2>&1 || true
+          fi
+        }
+        trap cleanup EXIT
+
+        docker run --rm --entrypoint /app/bin/python "${docker_env[@]}" "$IMAGE" -c '
+        import ctypes
+        import django
+        import os
+        import sqlite3
+        import ssl
+
+        if os.environ.get("DB") == "postgres":
+            import psycopg
+
+        for library in (
+            "libxmlsec1.so.1",
+            "libxmlsec1-openssl.so.1",
+            "libxslt.so.1",
+            "libpsl.so.5",
+        ):
+            ctypes.CDLL(library)
+        '
+
+        docker run --detach --name "$name" "${docker_env[@]}" "$IMAGE"
+
+        SECONDS=0
+        while (( SECONDS < STARTUP_TIMEOUT_SECONDS )); do
+          if [[ "$(docker inspect --format '{{.State.Running}}' "$name")" != true ]]; then
+            echo "Container exited before the health check succeeded" >&2
+            exit 1
+          fi
+
+          if docker exec "$name" /app/bin/python -c '
+        import sys
+        import urllib.request
+
+        urllib.request.urlopen(sys.argv[1], timeout=2)
+        ' "$HEALTH_CHECK_URL" 2>/dev/null; then
+            echo "Smoke test passed: $HEALTH_CHECK_URL"
+            exit 0
+          fi
+
+          sleep 1
+        done
+
+        echo "Health check did not succeed within ${STARTUP_TIMEOUT_SECONDS}s: $HEALTH_CHECK_URL" >&2
+        exit 1
