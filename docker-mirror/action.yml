@@ -1,0 +1,38 @@
+name: 'Docker registry mirror'
+
+description: 'Configures the docker daemon and a buildkit config to use a pull-through cache for Docker Hub'
+
+inputs:
+  mirror:
+    description: 'Registry mirror host (no scheme)'
+    required: false
+    default: 'mirror.gcr.io'
+
+outputs:
+  buildkitd_config:
+    description: 'Path to buildkitd config; pass to docker/setup-buildx-action buildkitd-config'
+    value: ${{ steps.buildkit.outputs.path }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Configure docker daemon mirror
+      shell: bash
+      env:
+        MIRROR: ${{ inputs.mirror }}
+      run: |
+        sudo mkdir -p /etc/docker
+        existing=$(sudo cat /etc/docker/daemon.json 2>/dev/null || echo '{}')
+        echo "$existing" | jq --arg m "https://$MIRROR" '. + {"registry-mirrors": [$m]}' \
+          | sudo tee /etc/docker/daemon.json
+        sudo systemctl restart docker
+
+    - name: Write buildkitd config
+      id: buildkit
+      shell: bash
+      env:
+        MIRROR: ${{ inputs.mirror }}
+      run: |
+        path="${RUNNER_TEMP}/buildkitd.toml"
+        printf '[registry."docker.io"]\n  mirrors = ["%s"]\n' "$MIRROR" > "$path"
+        echo "path=$path" >> "$GITHUB_OUTPUT"

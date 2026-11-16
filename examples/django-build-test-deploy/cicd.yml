@@ -89,8 +89,14 @@ jobs:
           app_name: ${DJANGO_APP}
           exclude_paths: 'migrations'
 
+      - name: Configure Docker registry mirror
+        id: docker-mirror
+        uses: uw-it-aca/actions/docker-mirror@main
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
+        with:
+          buildkitd-config: ${{ steps.docker-mirror.outputs.buildkitd_config }}
 
       - name: Cache Docker layers
         uses: actions/cache@v5
