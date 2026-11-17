@@ -6,9 +6,13 @@ inputs:
     description: 'Name or tag of the locally available Docker image to test'
     required: true
   health-check-url:
-    description: 'HTTP URL to check from inside the container'
+    description: 'HTTP URL to check from inside the container. With unix-socket set, only the path is used.'
     required: false
     default: 'http://127.0.0.1:8000/'
+  unix-socket:
+    description: 'Path of a unix socket inside the container to send the health check to, for images that serve only on a socket (e.g. behind an nginx sidecar)'
+    required: false
+    default: ''
   startup-timeout-seconds:
     description: 'Maximum seconds to wait for the health check to succeed'
     required: false
@@ -26,6 +30,7 @@ runs:
       env:
         IMAGE: ${{ inputs.image }}
         HEALTH_CHECK_URL: ${{ inputs.health-check-url }}
+        UNIX_SOCKET: ${{ inputs.unix-socket }}
         STARTUP_TIMEOUT_SECONDS: ${{ inputs.startup-timeout-seconds }}
         ADDITIONAL_ENV: ${{ inputs.additional-env }}
       run: |
@@ -113,11 +118,29 @@ runs:
           fi
 
           if docker exec "$name" /app/bin/python -c '
+        import http.client
+        import socket
         import sys
+        import urllib.parse
         import urllib.request
 
-        urllib.request.urlopen(sys.argv[1], timeout=2)
-        ' "$HEALTH_CHECK_URL" 2>/dev/null; then
+        url, sock_path = sys.argv[1], sys.argv[2]
+        if not sock_path:
+            urllib.request.urlopen(url, timeout=2)
+            sys.exit(0)
+
+        class UnixConnection(http.client.HTTPConnection):
+            def connect(self):
+                self.sock = socket.socket(socket.AF_UNIX)
+                self.sock.settimeout(2)
+                self.sock.connect(sock_path)
+
+        parts = urllib.parse.urlsplit(url)
+        conn = UnixConnection(parts.netloc or "localhost")
+        conn.request("GET", (parts.path or "/") + ("?" + parts.query if parts.query else ""))
+        status = conn.getresponse().status
+        sys.exit(0 if status < 400 else 1)
+        ' "$HEALTH_CHECK_URL" "$UNIX_SOCKET" 2>/dev/null; then
             echo "Smoke test passed: $HEALTH_CHECK_URL"
             exit 0
           fi
