@@ -112,6 +112,13 @@ jobs:
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 
+      - name: Smoke-test production image
+        # Fail early if the app won't even run. Comment this out if not needed.
+        uses: uw-it-aca/actions/django-container-smoke-test@main
+        with:
+          image: ${{ needs.context.outputs.image_tag }}
+          health-check-url: http://127.0.0.1:8000/metrics
+
       - name: Build Test Image
         uses: docker/build-push-action@v7
         with:
